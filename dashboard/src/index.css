@@ -1,0 +1,88 @@
+/* ── Design Tokens ──────────────────────────────────────────────────────── */
+:root {
+  --bg-base:        #090c10;
+  --bg-surface:     #0d1117;
+  --bg-panel:       #111820;
+  --bg-panel-hover: #16202c;
+  --bg-card:        #141d27;
+
+  --border:         #1e2d3d;
+  --border-bright:  #2a3f55;
+
+  --neon-cyan:      #00e5ff;
+  --neon-cyan-dim:  #00bcd480;
+  --neon-green:     #39ff14;
+  --neon-green-dim: #39ff1440;
+  --neon-amber:     #ffab00;
+  --neon-amber-dim: #ffab0040;
+  --neon-red:       #ff1744;
+  --neon-red-dim:   #ff174440;
+
+  --text-primary:   #e2eaf4;
+  --text-secondary: #7a9bb5;
+  --text-muted:     #3d5670;
+  --text-mono:      'Share Tech Mono', monospace;
+
+  --font-display:   'Barlow Condensed', sans-serif;
+  --font-body:      'Barlow', sans-serif;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+}
+
+/* ── Reset ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar            { width: 4px; height: 4px; }
+::-webkit-scrollbar-track      { background: var(--bg-base); }
+::-webkit-scrollbar-thumb      { background: var(--border-bright); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover{ background: var(--neon-cyan-dim); }
+
+/* ── Leaflet dark overrides ─────────────────────────────────────────────── */
+.leaflet-container {
+  background: #090c10 !important;
+  font-family: var(--font-body) !important;
+}
+.leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(0.7) brightness(0.7); }
+.leaflet-control-attribution { display: none; }
+.leaflet-control-zoom a {
+  background: var(--bg-panel) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border) !important;
+}
+.leaflet-control-zoom a:hover { background: var(--bg-panel-hover) !important; color: var(--neon-cyan) !important; }
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+@keyframes scan-line {
+  0%   { top: 0%; }
+  100% { top: 100%; }
+}
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes neon-flicker {
+  0%, 95%, 100% { opacity: 1; }
+  96%            { opacity: 0.4; }
+  98%            { opacity: 0.8; }
+}
