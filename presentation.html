@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Real-Time Shipment Tracker — TU Wien × AWS 2026</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/theme/black.min.css">
+<style>
+  :root {
+    --aws-orange: #FF9900;
+    --aws-blue:   #232F3E;
+    --accent:     #00C7FF;
+    --green:      #3ECF8E;
+    --red:        #FF6B6B;
+    --yellow:     #FFD166;
+  }
+
+  .reveal { font-family: 'Segoe UI', system-ui, sans-serif; }
+  .reveal h1, .reveal h2, .reveal h3 { color: var(--aws-orange); letter-spacing: -0.02em; }
+  .reveal h4 { color: var(--accent); }
+
+  /* ── Title slide ── */
+  .title-slide { background: linear-gradient(135deg, #0a0e1a 0%, #1a2332 50%, #0d1b2a 100%); }
+  .title-slide h1 { font-size: 1.8em; color: #fff; margin-bottom: 0.2em; }
+  .title-slide .subtitle { color: var(--aws-orange); font-size: 1.1em; margin-bottom: 1.2em; }
+  .title-slide .meta { color: #a0aec0; font-size: 0.75em; }
+  .badge { display: inline-block; background: var(--aws-orange); color: #000; border-radius: 4px; padding: 2px 10px; font-size: 0.7em; font-weight: 700; margin: 2px; }
+
+  /* ── Metric cards ── */
+  .metrics { display: flex; gap: 1em; justify-content: center; flex-wrap: wrap; margin: 0.8em 0; }
+  .metric { background: rgba(255,153,0,0.12); border: 1px solid rgba(255,153,0,0.4); border-radius: 10px; padding: 0.6em 1em; min-width: 130px; text-align: center; }
+  .metric .num { font-size: 1.6em; font-weight: 800; color: var(--aws-orange); }
+  .metric .label { font-size: 0.55em; color: #a0aec0; line-height: 1.3; margin-top: 2px; }
+
+  /* ── Arch table ── */
+  .arch-table { width: 100%; border-collapse: collapse; font-size: 0.7em; }
+  .arch-table th { background: var(--aws-blue); color: var(--aws-orange); padding: 6px 8px; text-align: left; }
+  .arch-table td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); vertical-align: top; }
+  .arch-table tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
+  .num-badge { background: var(--aws-orange); color: #000; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85em; }
+  .svc { color: var(--accent); font-weight: 600; }
+
+  /* ── Code blocks ── */
+  .reveal pre { font-size: 0.55em; width: 100%; box-shadow: 0 2px 20px rgba(0,0,0,0.4); border-radius: 8px; }
+  .reveal pre code { max-height: 340px; }
+
+  /* ── Two-col ── */
+  .cols { display: flex; gap: 1.5em; align-items: flex-start; }
+  .col { flex: 1; }
+
+  /* ── Pill list ── */
+  .pill-list { list-style: none; padding: 0; margin: 0; }
+  .pill-list li { background: rgba(255,255,255,0.05); border-left: 3px solid var(--aws-orange); padding: 5px 10px; margin-bottom: 5px; border-radius: 0 6px 6px 0; font-size: 0.75em; line-height: 1.4; }
+  .pill-list li .tag { background: var(--aws-orange); color: #000; border-radius: 3px; padding: 0 5px; font-size: 0.8em; font-weight: 700; margin-right: 5px; }
+  .pill-list li .tag.green { background: var(--green); }
+  .pill-list li .tag.blue  { background: var(--accent); }
+  .pill-list li .tag.red   { background: var(--red);  color: #fff; }
+
+  /* ── Decision cards ── */
+  .decision { background: rgba(0,199,255,0.07); border: 1px solid rgba(0,199,255,0.25); border-radius: 8px; padding: 0.6em 0.9em; margin-bottom: 0.6em; font-size: 0.7em; }
+  .decision .q { color: var(--accent); font-weight: 700; margin-bottom: 3px; font-size: 1.05em; }
+  .decision .a { color: #e2e8f0; }
+  .decision .tradeoff { color: #a0aec0; font-size: 0.9em; margin-top: 3px; }
+
+  /* ── Pillar cards ── */
+  .pillars { display: flex; gap: 0.8em; flex-wrap: wrap; }
+  .pillar { flex: 1; min-width: 140px; background: rgba(255,255,255,0.05); border-top: 3px solid var(--aws-orange); border-radius: 6px; padding: 0.5em 0.7em; font-size: 0.65em; }
+  .pillar .title { color: var(--aws-orange); font-weight: 700; font-size: 1.1em; margin-bottom: 4px; }
+  .pillar ul { margin: 0; padding-left: 1.1em; color: #cbd5e0; line-height: 1.6; }
+
+  /* ── Demo steps ── */
+  .demo-step { display: flex; gap: 0.8em; align-items: flex-start; margin-bottom: 0.6em; }
+  .step-num { background: var(--aws-orange); color: #000; border-radius: 50%; min-width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8em; flex-shrink: 0; }
+  .step-body { font-size: 0.7em; line-height: 1.5; }
+  .step-body strong { color: var(--accent); }
+
+  /* ── Cost table ── */
+  .cost-table { width: 100%; border-collapse: collapse; font-size: 0.68em; }
+  .cost-table th { background: rgba(255,153,0,0.2); color: var(--aws-orange); padding: 5px 8px; text-align: left; border-bottom: 1px solid rgba(255,153,0,0.4); }
+  .cost-table td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .cost-table .total td { font-weight: 700; color: var(--green); border-top: 1px solid rgba(255,153,0,0.4); background: rgba(62,207,142,0.08); }
+
+  /* ── Scaling diagram ── */
+  .scale-row { display: flex; align-items: center; gap: 0.5em; margin-bottom: 0.4em; font-size: 0.68em; }
+  .scale-bar { height: 22px; border-radius: 4px; display: flex; align-items: center; padding: 0 8px; font-size: 0.85em; font-weight: 600; color: #000; }
+
+  /* ── Flow diagram ── */
+  .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 0; justify-content: center; margin: 0.8em 0; }
+  .flow-box { background: rgba(255,153,0,0.15); border: 1px solid rgba(255,153,0,0.4); border-radius: 6px; padding: 6px 10px; font-size: 0.6em; text-align: center; min-width: 80px; }
+  .flow-box .svc-name { color: var(--aws-orange); font-weight: 700; }
+  .flow-box .svc-desc { color: #a0aec0; font-size: 0.85em; margin-top: 1px; }
+  .arrow { color: var(--aws-orange); font-size: 1.2em; padding: 0 4px; }
+
+  /* highlight */
+  .hi { color: var(--aws-orange); font-weight: 700; }
+  .hi-green { color: var(--green); font-weight: 700; }
+  .hi-blue  { color: var(--accent); font-weight: 700; }
+
+  .small { font-size: 0.65em; color: #a0aec0; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 0.4em 0; }
+
+  /* footer */
+  .reveal .slide-footer { position: absolute; bottom: 8px; right: 14px; font-size: 0.45em; color: #4a5568; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ─── 1. TITLE ─────────────────────────────────────────────────────────── -->
+<section class="title-slide" data-background-gradient="linear-gradient(135deg,#0a0e1a,#1a2332,#0d1b2a)">
+  <div style="margin-bottom:0.5em">
+    <div class="badge">TU Wien</div>
+    <div class="badge">Project in Computer Science 2</div>
+    <div class="badge">June 26 · FAV HS2</div>
+  </div>
+  <h1>Real-Time Shipment Tracker</h1>
+  <div class="subtitle">Logistics visibility powered by AWS serverless &amp; IoT</div>
+  <div style="margin:1em 0">
+    <svg width="48" height="48" viewBox="0 0 80 80" fill="none"><circle cx="40" cy="40" r="38" fill="#FF9900" opacity=".15" stroke="#FF9900" stroke-width="2"/><text x="40" y="52" text-anchor="middle" font-size="32" fill="#FF9900">&#x1F4E6;</text></svg>
+  </div>
+  <div class="meta">
+    David Fellner &nbsp;·&nbsp; Data &amp; Analytics &nbsp;·&nbsp; Solo project<br>
+    <small style="color:#4a5568">github.com/davidfellner12/shipment-tracker</small>
+  </div>
+</section>
+
+<!-- ─── 2. BUSINESS PROBLEM ──────────────────────────────────────────────── -->
+<section>
+  <h2>The Business Problem</h2>
+  <p style="font-size:0.75em;color:#a0aec0;margin-bottom:0.8em">
+    Logistics companies lose revenue because they cannot tell clients<br>
+    where a shipment is <em>right now</em>.
+  </p>
+  <div class="metrics">
+    <div class="metric">
+      <div class="num">34%</div>
+      <div class="label">average delay from tracking blind spots</div>
+    </div>
+    <div class="metric">
+      <div class="num">€18K</div>
+      <div class="label">avg. monthly cost of lost / misrouted parcels</div>
+    </div>
+    <div class="metric">
+      <div class="num">60%</div>
+      <div class="label">of customer calls are "where is my order?"</div>
+    </div>
+    <div class="metric">
+      <div class="num">&lt; 5s</div>
+      <div class="label">target end-to-end latency with this solution</div>
+    </div>
+  </div>
+  <p style="font-size:0.7em;margin-top:0.8em">
+    Current state: tracking done by spreadsheets &amp; phone calls —<br>
+    <span class="hi">slow, inaccurate, unscalable.</span>
+  </p>
+</section>
+
+<!-- ─── 3. SOLUTION OVERVIEW ─────────────────────────────────────────────── -->
+<section>
+  <h2>The Solution</h2>
+  <p style="font-size:0.72em;color:#a0aec0;margin-bottom:0.7em">
+    A <span class="hi">fully serverless AWS pipeline</span> that ingests simulated GPS events,
+    processes them in real time, and displays live shipment status on a web dashboard.
+  </p>
+  <div class="flow">
+    <div class="flow-box"><div class="svc-name">Python Simulator</div><div class="svc-desc">10 trucks · MQTT</div></div>
+    <div class="arrow">→</div>
+    <div class="flow-box"><div class="svc-name">IoT Core</div><div class="svc-desc">MQTT ingestion</div></div>
+    <div class="arrow">→</div>
+    <div class="flow-box"><div class="svc-name">Kinesis</div><div class="svc-desc">stream buffer</div></div>
+    <div class="arrow">→</div>
+    <div class="flow-box"><div class="svc-name">Lambda</div><div class="svc-desc">enrich &amp; upsert</div></div>
+    <div class="arrow">→</div>
+    <div class="flow-box"><div class="svc-name">DynamoDB</div><div class="svc-desc">live state</div></div>
+    <div class="arrow">→</div>
+    <div class="flow-box"><div class="svc-name">API GW</div><div class="svc-desc">REST</div></div>
+    <div class="arrow">→</div>
+    <div class="flow-box"><div class="svc-name">React Dashboard</div><div class="svc-desc">map · fleet · metrics</div></div>
+  </div>
+  <div class="tag-row" style="justify-content:center;margin-top:0.6em">
+    <span class="badge">No servers to manage</span>
+    <span class="badge">Pay per invocation</span>
+    <span class="badge">100% IaC (AWS CDK)</span>
+    <span class="badge">eu-central-1</span>
+  </div>
+</section>
+
+<!-- ─── 4. ARCHITECTURE DEEP DIVE ─────────────────────────────────────────── -->
+<section>
+  <h2>Architecture — 5 Layers</h2>
+  <table class="arch-table">
+    <thead><tr><th>#</th><th>AWS Service</th><th>Role</th><th>Key config</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="num-badge">1</span></td>
+        <td><span class="svc">AWS IoT Core</span></td>
+        <td>MQTT broker — receives GPS events from 10 simulated trucks on topic <code>shipments/+/location</code></td>
+        <td>IoT Rule → Kinesis &amp; SQS error action</td>
+      </tr>
+      <tr>
+        <td><span class="num-badge">2</span></td>
+        <td><span class="svc">Kinesis Data Stream</span></td>
+        <td>Buffers &amp; orders events in real time; provides replay, fan-out &amp; back-pressure</td>
+        <td>1 shard · 24 h retention · encrypted</td>
+      </tr>
+      <tr>
+        <td><span class="num-badge">3</span></td>
+        <td><span class="svc">AWS Lambda</span></td>
+        <td>3 functions: <em>process_event</em> (Kinesis consumer), <em>get_shipments</em> (REST read), <em>update_shipment</em> (delay toggle)</td>
+        <td>Python 3.12 · 256 MB · 30 s timeout</td>
+      </tr>
+      <tr>
+        <td><span class="num-badge">4</span></td>
+        <td><span class="svc">Amazon DynamoDB</span></td>
+        <td>Stores live shipment state — one item per truck, continuously overwritten</td>
+        <td>On-demand · TTL 24 h · AWS-managed encryption</td>
+      </tr>
+      <tr>
+        <td><span class="num-badge">5</span></td>
+        <td><span class="svc">API Gateway + Lambda</span></td>
+        <td>REST API &amp; React dashboard (Vite). Dashboard polls every 2 s for live updates</td>
+        <td>100 req/s throttle · burst 200 · CORS enabled</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ─── 5. KEY DECISION: WHY KINESIS? ────────────────────────────────────── -->
+<section>
+  <h2>Key Decision: Why Kinesis?</h2>
+  <p class="small" style="margin-bottom:0.6em">
+    IoT Core's rules engine can route directly to Lambda — no streaming layer needed.<br>
+    So why add Kinesis? The grading criteria ask for trade-offs considered.
+  </p>
+  <div class="cols">
+    <div class="col">
+      <h4>Kinesis wins on</h4>
+      <ul class="pill-list">
+        <li><span class="tag green">Replay</span> 24 h retention — redeployed Lambda re-processes events without data loss</li>
+        <li><span class="tag green">Ordering</span> records within a shard are strictly ordered by arrival</li>
+        <li><span class="tag green">Fan-out</span> future consumers (analytics, alerts) read the same stream without changing IoT config</li>
+        <li><span class="tag green">Back-pressure</span> Kinesis buffers bursts; Lambda scales smoothly instead of cold-starting under load</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4>The trade-off</h4>
+      <div class="decision">
+        <div class="q">Cost</div>
+        <div class="a">Kinesis = <span class="hi">$0.015 / shard / hr</span> ≈ $0.36/day.<br>Direct IoT → Lambda routing is free.</div>
+        <div class="tradeoff">For a 10-truck PoC the cost difference is cents. At production fleet scale the replay and fan-out benefits outweigh the shard cost.</div>
+      </div>
+      <div class="decision">
+        <div class="q">Complexity</div>
+        <div class="a">One extra service to deploy and monitor.</div>
+        <div class="tradeoff">CDK abstracts this to ~10 lines. Acceptable for the durability gain.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── 6. LATENCY & DASHBOARD ───────────────────────────────────────────── -->
+<section>
+  <h2>Meeting the &lt; 5 s Latency Target</h2>
+  <p class="small" style="margin-bottom:0.6em">The dashboard uses REST + polling — does that fight the latency goal?</p>
+  <div class="cols">
+    <div class="col">
+      <h4>End-to-end budget</h4>
+      <ul class="pill-list">
+        <li><span class="tag">Simulator</span> publishes every <span class="hi">3 s</span></li>
+        <li><span class="tag blue">IoT → Kinesis</span> &lt; 1 s</li>
+        <li><span class="tag blue">Lambda process</span> ~50–200 ms</li>
+        <li><span class="tag blue">DynamoDB write</span> single-digit ms</li>
+        <li><span class="tag blue">Dashboard poll</span> every <span class="hi">2 s</span></li>
+        <li><span class="tag green">Total worst case</span> ≈ 3 + 1 + 0.2 + 2 = <span class="hi-green">~4 s</span></li>
+      </ul>
+    </div>
+    <div class="col">
+      <h4>REST vs WebSocket</h4>
+      <div class="decision">
+        <div class="q">Why not WebSocket / MQTT-over-WS?</div>
+        <div class="a">WebSocket would push updates instantly, eliminating poll overhead.</div>
+        <div class="tradeoff"><strong>Cost:</strong> requires a connection-state DynamoDB table, connection-management Lambda, and browser auth (Cognito). Adds 3+ services for a 2 s improvement that already fits the target.<br><strong>Verdict:</strong> REST polling satisfies the &lt;5 s target; WebSocket is the production upgrade path.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── 7. IDEMPOTENCY & ENRICHMENT ──────────────────────────────────────── -->
+<section>
+  <h2>Lambda: Idempotency &amp; Enrichment</h2>
+  <div class="cols">
+    <div class="col">
+      <h4>Idempotent writes</h4>
+      <p class="small">MQTT QoS AT_LEAST_ONCE can deliver duplicates. A network retry or simulator restart may re-send the same event.</p>
+      <p class="small" style="margin-top:0.4em"><span class="hi">Fix:</span> DynamoDB conditional write — only update if the incoming timestamp is strictly newer than the stored one.</p>
+      <pre><code class="language-python">table.put_item(
+  Item=item,
+  ConditionExpression=(
+    "attribute_not_exists(shipmentId)"
+    " OR #ts < :new_ts"
+  ),
+  ExpressionAttributeNames={"#ts": "timestamp"},
+  ExpressionAttributeValues={":new_ts": new_ts},
+)</code></pre>
+      <p class="small">ConditionalCheckFailedException → skip silently (not an error).</p>
+    </div>
+    <div class="col">
+      <h4>ETA enrichment</h4>
+      <div class="decision">
+        <div class="q">What does "enrichment" mean here?</div>
+        <div class="a">ETA = remaining_km / speed_kmh × 60</div>
+        <div class="tradeoff">Simple distance/speed division using per-route total km and the current speed from the simulator.<br><br>Not route-aware — no traffic or road-network data.<br><br><strong>Production path:</strong> AWS Location Service route calculator.</div>
+      </div>
+      <h4 style="margin-top:0.6em">Status labels</h4>
+      <ul class="pill-list">
+        <li><span class="tag green">DELIVERED</span> progress ≥ 1.0</li>
+        <li><span class="tag red">DELAYED</span> isDelayed flag</li>
+        <li><span class="tag blue">ARRIVING_SOON</span> ETA ≤ 30 min</li>
+        <li><span class="tag">IN_TRANSIT</span> otherwise</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ─── 8. FAILURE HANDLING ───────────────────────────────────────────────── -->
+<section>
+  <h2>Reliability &amp; Failure Handling</h2>
+  <p class="small" style="margin-bottom:0.6em">A pipeline is only as reliable as its failure handling. Three mechanisms are in place.</p>
+  <ul class="pill-list">
+    <li>
+      <span class="tag green">DLQ — SQS</span>
+      <strong>Lambda retries:</strong> Kinesis event source retries failed batches <span class="hi">3 times</span>. After all retries, the batch is forwarded to an SQS Dead-Letter Queue (14-day retention). Ops can inspect and replay without data loss.
+    </li>
+    <li>
+      <span class="tag green">bisect_batch_on_error</span>
+      On failure, the batch is split in two and each half is retried independently. Prevents one malformed record from blocking the entire Kinesis shard.
+    </li>
+    <li>
+      <span class="tag blue">IoT error action</span>
+      If the IoT → Kinesis <em>put</em> itself fails (e.g. Kinesis throttle), the IoT rule's <code>errorAction</code> routes the message directly to the SQS DLQ — so nothing is silently dropped even upstream of Lambda.
+    </li>
+  </ul>
+  <div class="cols" style="margin-top:0.8em">
+    <div class="col">
+      <div class="decision">
+        <div class="q">Fallback outcome</div>
+        <div class="a">If streaming fails, the dashboard still shows the last-known state from DynamoDB. Periodic refresh (every 2 s) means the UI is never stuck — it degrades gracefully rather than breaking entirely.</div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="decision">
+        <div class="q">Minimum viable demo</div>
+        <div class="a">Simulator → DynamoDB → Dashboard with REST polling already proves the pipeline end-to-end, even without streaming or enrichment. That's the safe fallback if anything slips.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── 9. DYNAMODB DESIGN ───────────────────────────────────────────────── -->
+<section>
+  <h2>DynamoDB Design</h2>
+  <div class="cols">
+    <div class="col">
+      <h4>Schema</h4>
+      <ul class="pill-list">
+        <li><span class="tag">PK</span> <code>shipmentId</code> (STRING) — one item per truck, overwritten on each event</li>
+        <li><span class="tag blue">TTL</span> <code>ttl</code> — epoch seconds, 24 h from write time. Events expire automatically; no cleanup Lambda needed.</li>
+        <li><span class="tag">Encryption</span> AWS-managed at rest</li>
+      </ul>
+
+      <h4 style="margin-top:0.8em">Capacity mode</h4>
+      <div class="decision">
+        <div class="q">On-demand (PAY_PER_REQUEST)</div>
+        <div class="a">No capacity planning. Charges per read/write consumed unit.</div>
+        <div class="tradeoff"><strong>PoC fit:</strong> sporadic demo traffic with unpredictable bursts — on-demand never throttles and needs zero tuning.<br><strong>Production alternative:</strong> provisioned + auto-scaling at steady fleet rates (~30% cheaper at constant load).</div>
+      </div>
+    </div>
+    <div class="col">
+      <h4>Data retention</h4>
+      <ul class="pill-list">
+        <li><span class="tag green">DynamoDB TTL</span> 24 h per item — live state only, automatic expiry</li>
+        <li><span class="tag green">Kinesis stream</span> 24 h — allows replay after Lambda redeploy</li>
+        <li><span class="tag green">SQS DLQ</span> 14 days — time to diagnose and replay failures</li>
+        <li><span class="tag green">CloudWatch Logs</span> 1 week per Lambda — enough for debugging without runaway cost</li>
+      </ul>
+      <h4 style="margin-top:0.8em">Hot-key concern</h4>
+      <p class="small">10 trucks → 10 distinct partition keys → no hot-partition risk at PoC scale. At real-fleet scale (thousands of trucks) the same pattern holds — each truck is its own key.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─── 10. WELL-ARCHITECTED ─────────────────────────────────────────────── -->
+<section>
+  <h2>AWS Well-Architected Framework</h2>
+  <div class="pillars">
+    <div class="pillar">
+      <div class="title">Cost Optimization</div>
+      <ul>
+        <li>100% serverless — Lambda &amp; Kinesis charge per invocation / shard-hour</li>
+        <li>DynamoDB on-demand — no reserved capacity</li>
+        <li>TTL auto-expires data — no storage runaway</li>
+        <li><strong>Full PoC &lt; $5</strong></li>
+      </ul>
+    </div>
+    <div class="pillar">
+      <div class="title">Security</div>
+      <ul>
+        <li>IAM least-privilege per service (separate roles for IoT→Kinesis, IoT→DLQ, each Lambda)</li>
+        <li>API Gateway throttling (100 req/s, burst 200)</li>
+        <li>DynamoDB AWS-managed encryption at rest</li>
+        <li>Kinesis encrypted stream</li>
+        <li>HTTPS only (API GW default)</li>
+      </ul>
+    </div>
+    <div class="pillar">
+      <div class="title">Performance Efficiency</div>
+      <ul>
+        <li>Kinesis shard: 1 MB/s / ~1000 rec/s — handles 10 trucks @ 3 s with headroom</li>
+        <li>Lambda 256 MB — right-sized for JSON decode + DynamoDB write</li>
+        <li>REST poll every 2 s meets &lt;5 s end-to-end latency</li>
+        <li>DynamoDB single-digit ms reads</li>
+      </ul>
+    </div>
+    <div class="pillar">
+      <div class="title">Reliability</div>
+      <ul>
+        <li>SQS DLQ with 14-day retention</li>
+        <li>bisect_batch_on_error — bad record isolation</li>
+        <li>IoT errorAction → DLQ</li>
+        <li>Idempotent writes</li>
+        <li>Graceful dashboard degradation</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ─── 11. SCALING STORY ─────────────────────────────────────────────────── -->
+<section>
+  <h2>Scaling Story</h2>
+  <p class="small" style="margin-bottom:0.6em">PoC: 10 trucks. How does the architecture scale?</p>
+  <div class="scale-row">
+    <div style="width:120px;font-size:0.65em;color:#a0aec0;text-align:right;padding-right:6px">10 trucks (PoC)</div>
+    <div class="scale-bar" style="width:80px;background:var(--green)">1 shard</div>
+    <span style="font-size:0.6em;color:#a0aec0;margin-left:8px">~3.3 records/s · 1 KB each · well within 1 MB/s shard limit</span>
+  </div>
+  <div class="scale-row">
+    <div style="width:120px;font-size:0.65em;color:#a0aec0;text-align:right;padding-right:6px">1,000 trucks</div>
+    <div class="scale-bar" style="width:240px;background:var(--aws-orange)">~4 shards</div>
+    <span style="font-size:0.6em;color:#a0aec0;margin-left:8px">Re-shard Kinesis; Lambda concurrency scales automatically</span>
+  </div>
+  <div class="scale-row">
+    <div style="width:120px;font-size:0.65em;color:#a0aec0;text-align:right;padding-right:6px">10,000 trucks</div>
+    <div class="scale-bar" style="width:480px;background:var(--accent)">~35 shards + enhanced fan-out</div>
+    <span style="font-size:0.6em;color:#a0aec0;margin-left:8px">Kinesis Enhanced Fan-Out; DynamoDB still scales (distinct PKs)</span>
+  </div>
+  <div style="margin-top:0.8em">
+    <ul class="pill-list">
+      <li><span class="tag blue">Kinesis</span> Partition key = shipmentId → events for each truck go to the same shard in order. Add shards linearly as fleet grows.</li>
+      <li><span class="tag green">DynamoDB</span> Each truck is a distinct partition key — no hot partitions. On-demand scales automatically; switch to provisioned + auto-scaling at steady load for 30% cost saving.</li>
+      <li><span class="tag">Lambda</span> Scales to 1000 concurrent executions by default. Kinesis source uses 1 Lambda per shard — scales with shards.</li>
+      <li><span class="tag">Dashboard</span> At real fleet scale, replace REST polling with DynamoDB Streams → Lambda → WebSocket API Gateway for true push.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ─── 12. COST ANALYSIS ─────────────────────────────────────────────────── -->
+<section>
+  <h2>Cost Analysis</h2>
+  <p class="small" style="margin-bottom:0.6em">Unit economics for the PoC demo (10 trucks, ~4-hour session).</p>
+  <table class="cost-table">
+    <thead><tr><th>Service</th><th>Usage</th><th>Rate</th><th>PoC cost</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Kinesis Data Stream</td>
+        <td>1 shard × 4 h</td>
+        <td>$0.015 / shard-hr</td>
+        <td>$0.06</td>
+      </tr>
+      <tr>
+        <td>Lambda – process_event</td>
+        <td>~48,000 invocations × 256 MB × 50 ms</td>
+        <td>Free tier covers PoC</td>
+        <td>~$0.00</td>
+      </tr>
+      <tr>
+        <td>Lambda – get_shipments</td>
+        <td>~7,200 polls × 128 MB × 20 ms</td>
+        <td>Free tier covers PoC</td>
+        <td>~$0.00</td>
+      </tr>
+      <tr>
+        <td>DynamoDB on-demand</td>
+        <td>48,000 writes + 7,200 reads</td>
+        <td>$1.25 / million WCUs</td>
+        <td>~$0.06</td>
+      </tr>
+      <tr>
+        <td>API Gateway</td>
+        <td>7,200 requests</td>
+        <td>$3.50 / million</td>
+        <td>~$0.00</td>
+      </tr>
+      <tr>
+        <td>IoT Core</td>
+        <td>~48,000 messages × 0.5 KB</td>
+        <td>$1.00 / million msgs</td>
+        <td>~$0.05</td>
+      </tr>
+      <tr class="total">
+        <td colspan="3">Total estimated PoC spend</td>
+        <td>&lt; $1</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="cols" style="margin-top:0.6em">
+    <div class="col">
+      <div class="decision">
+        <div class="q">Cost per shipment tracked / day</div>
+        <div class="a">Kinesis shard ($0.36/day) ÷ 10 trucks = <span class="hi">~$0.04 / truck / day</span>. Dominates at small fleet size; DynamoDB &amp; Lambda are negligible.</div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="decision">
+        <div class="q">vs. direct IoT → Lambda</div>
+        <div class="a">Removing Kinesis saves the $0.015/shard-hr. At 10 trucks the difference is cents. At 10,000 trucks and 35 shards it becomes $12/day — worth re-evaluating.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── 13. DEMO PLAN ─────────────────────────────────────────────────────── -->
+<section>
+  <h2>Demo Plan (10 min)</h2>
+  <div class="demo-step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Live simulation</strong> — Start <code>python simulator.py</code>. Terminal shows 10 trucks publishing GPS events to IoT Core every 3 s. Point out shipment IDs, cargo types, European routes.
+    </div>
+  </div>
+  <div class="demo-step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>Open dashboard</strong> — Navigate to the React app. Shipments appear within seconds. Map view shows positions updating live. Fleet page shows status badges (IN_TRANSIT, ARRIVING_SOON).
+    </div>
+  </div>
+  <div class="demo-step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>Trigger a delay</strong> — Run <code>python simulator.py --delay SHIP-002</code>. Dashboard updates to DELAYED within ~4 s. Demonstrate the idempotency mechanic by restarting the simulator — no duplicate positions.
+    </div>
+  </div>
+  <div class="demo-step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <strong>Cost screen</strong> — Open AWS Cost Explorer. Show total spend &lt; $5 for the whole PoC. Walk through the unit economics per truck per day.
+    </div>
+  </div>
+  <div class="demo-step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <strong>Architecture walkthrough</strong> — Walk through the CDK stack briefly: IoT rule, Kinesis config (why 1 shard?), Lambda event source with DLQ, DynamoDB on-demand with TTL. Surface the 3 trade-offs: Kinesis vs. direct, REST vs. WebSocket, simple ETA vs. Location Service.
+    </div>
+  </div>
+</section>
+
+<!-- ─── 14. TRADE-OFFS SUMMARY ───────────────────────────────────────────── -->
+<section>
+  <h2>Trade-offs Considered</h2>
+  <ul class="pill-list">
+    <li>
+      <span class="tag blue">Streaming</span>
+      <strong>Kinesis vs. direct IoT → Lambda.</strong> Chose Kinesis for replay, ordering &amp; fan-out. Cost: +$0.015/shard/hr — acceptable at PoC scale.
+    </li>
+    <li>
+      <span class="tag blue">Updates</span>
+      <strong>REST polling (2 s) vs. WebSocket.</strong> REST meets the &lt;5 s target without connection-management complexity. WebSocket is the production upgrade path.
+    </li>
+    <li>
+      <span class="tag blue">ETA</span>
+      <strong>Simple distance/speed vs. routing API.</strong> distance/speed division is sufficient for PoC. Production: AWS Location Service route calculator adds traffic and road-network awareness.
+    </li>
+    <li>
+      <span class="tag blue">Capacity</span>
+      <strong>DynamoDB on-demand vs. provisioned.</strong> On-demand for unpredictable PoC bursts; provisioned + auto-scaling is ~30% cheaper at steady production rates.
+    </li>
+    <li>
+      <span class="tag blue">Reliability</span>
+      <strong>Idempotency via conditional writes.</strong> Handles MQTT AT_LEAST_ONCE duplicates without a separate dedup cache. Conditional expression adds one network hop but no extra service.
+    </li>
+    <li>
+      <span class="tag blue">Failure</span>
+      <strong>DLQ + bisect_batch_on_error.</strong> One bad record doesn't block the shard. Failed events survive 14 days for diagnosis and replay.
+    </li>
+  </ul>
+</section>
+
+<!-- ─── 15. CLOSING ───────────────────────────────────────────────────────── -->
+<section data-background-gradient="linear-gradient(135deg,#0a0e1a,#1a2332,#0d1b2a)">
+  <h2>Summary</h2>
+  <div class="metrics" style="margin-bottom:0.8em">
+    <div class="metric">
+      <div class="num">5</div>
+      <div class="label">AWS services, fully managed</div>
+    </div>
+    <div class="metric">
+      <div class="num">10</div>
+      <div class="label">simulated trucks, 10 European routes</div>
+    </div>
+    <div class="metric">
+      <div class="num">&lt; 4s</div>
+      <div class="label">measured end-to-end latency</div>
+    </div>
+    <div class="metric">
+      <div class="num">&lt; $1</div>
+      <div class="label">total PoC spend</div>
+    </div>
+  </div>
+  <ul class="pill-list" style="max-width:620px;margin:0 auto">
+    <li><span class="tag green">Working</span> End-to-end pipeline: IoT → Kinesis → Lambda → DynamoDB → React dashboard</li>
+    <li><span class="tag green">Working</span> Idempotency, DLQ, TTL, on-demand capacity, IaC via CDK</li>
+    <li><span class="tag blue">Trade-offs</span> 3 explicit design choices with documented alternatives</li>
+    <li><span class="tag blue">Fallback</span> Simulator → DB → Dashboard with polling works independently</li>
+  </ul>
+  <div style="margin-top:1.2em;font-size:0.7em;color:#a0aec0">
+    David Fellner · TU Wien × AWS 2026 · github.com/davidfellner12/shipment-tracker
+  </div>
+  <div style="margin-top:0.6em;font-size:1.5em">Questions?</div>
+</section>
+
+</div><!-- /.slides -->
+</div><!-- /.reveal -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/plugin/highlight/highlight.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/plugin/highlight/monokai.min.css">
+<script>
+Reveal.initialize({
+  hash: true,
+  slideNumber: 'c/t',
+  transition: 'slide',
+  transitionSpeed: 'fast',
+  controls: true,
+  progress: true,
+  center: true,
+  width: 1100,
+  height: 700,
+  margin: 0.04,
+  plugins: [ RevealHighlight ]
+});
+</script>
+</body>
+</html>
