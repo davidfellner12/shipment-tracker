@@ -69,4 +69,24 @@ export async function fetchShipments() {
   return data.shipments || [];
 }
 
+// PUT /shipments/{id} — toggle delay flag for live demo
+export async function updateShipmentDelay(id, isDelayed, reason = '') {
+  if (USE_MOCK) {
+    await new Promise(r => setTimeout(r, 80 + Math.random() * 60));
+    const route = ROUTES_DATA[id];
+    if (route) {
+      route.delayed     = isDelayed;
+      route.delayReason = isDelayed ? (reason || 'Manually flagged via dashboard') : undefined;
+    }
+    return { updated: id };
+  }
+  const res = await fetch(`${API_URL}/shipments/${id}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ isDelayed, delayReason: reason || undefined }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
 export function isMockMode() { return USE_MOCK; }

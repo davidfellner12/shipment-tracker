@@ -1,8 +1,10 @@
 // src/hooks/useShipments.js
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { fetchShipments } from '../lib/api';
+import { fetchShipments, updateShipmentDelay } from '../lib/api';
 
-const POLL_MS = Number(import.meta.env.VITE_POLL_INTERVAL) || 4000;
+// 2 s polling: pipeline latency ~1–2 s + poll overhead 0–2 s = ≤4 s total.
+// Satisfies the <5 s end-to-end latency target stated in the 1-pager.
+const POLL_MS = Number(import.meta.env.VITE_POLL_INTERVAL) || 2000;
 
 export function useShipments() {
   const [shipments, setShipments]     = useState([]);
@@ -33,5 +35,11 @@ export function useShipments() {
     return () => clearInterval(timerRef.current);
   }, [poll]);
 
-  return { shipments, lastUpdated, latencyMs, error, loading };
+  // Toggle delay on a single shipment then immediately refresh
+  const updateDelay = useCallback(async (id, isDelayed, reason) => {
+    await updateShipmentDelay(id, isDelayed, reason);
+    await poll();
+  }, [poll]);
+
+  return { shipments, lastUpdated, latencyMs, error, loading, updateDelay };
 }
