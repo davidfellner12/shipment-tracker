@@ -7,21 +7,26 @@ import MapView             from '../components/MapView';
 import EventLog            from '../components/EventLog';
 import ShipmentDetailPanel from '../components/ShipmentDetailPanel';
 import ShipmentDetailPage  from '../components/ShipmentDetailPage';
+import ContactOverlay      from '../components/ContactOverlay';
+import { exportFleetCSV }  from '../lib/export';
 
 export default function FleetPage({ shipments, lastUpdated, latencyMs, error, updateDelay, onNavigate }) {
-  const [selectedId,   setSelectedId]   = useState(null);
-  const [detailPageId, setDetailPageId] = useState(null);
-  const [logOpen,      setLogOpen]      = useState(true);
+  const [selectedId,    setSelectedId]    = useState(null);
+  const [detailPageId,  setDetailPageId]  = useState(null);
+  const [contactShip,   setContactShip]   = useState(null); // shipment for ContactOverlay
+  const [logOpen,       setLogOpen]       = useState(true);
 
   const selectedShipment = shipments.find(s => s.shipmentId === selectedId)   || null;
   const detailShipment   = shipments.find(s => s.shipmentId === detailPageId) || null;
+  const delayedShipments = shipments.filter(s => s.status === 'DELAYED');
 
-  // Full-page detail view takes over
+  // Full-page shipment detail
   if (detailShipment) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <NavBar page="fleet" onNavigate={onNavigate} shipments={shipments} latencyMs={latencyMs} />
         <ShipmentDetailPage shipment={detailShipment} onBack={() => setDetailPageId(null)} />
+        {contactShip && <ContactOverlay shipment={contactShip} onClose={() => setContactShip(null)} />}
       </div>
     );
   }
@@ -36,33 +41,42 @@ export default function FleetPage({ shipments, lastUpdated, latencyMs, error, up
         </div>
       )}
 
-      {/* Stats strip */}
       <StatsBar shipments={shipments} />
 
-      {/* Body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
         {/* ── Sidebar ── */}
         <aside style={{
-          width: '300px', flexShrink: 0,
-          display: 'flex', flexDirection: 'column',
-          background: 'var(--bg-surface)', borderRight: '1px solid var(--border)',
-          overflow: 'hidden',
+          width: '300px', flexShrink: 0, display: 'flex', flexDirection: 'column',
+          background: 'var(--bg-surface)', borderRight: '1px solid var(--border)', overflow: 'hidden',
         }}>
           {/* Sidebar header */}
-          <div style={{
-            padding: '14px 16px 12px',
-            fontFamily: 'var(--font-display)', fontSize: '9px', letterSpacing: '0.22em',
-            color: 'var(--text-muted)', textTransform: 'uppercase',
-            borderBottom: '1px solid var(--border)', flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <span>Fleet · {shipments.length} shipments</span>
-            {lastUpdated && (
-              <span style={{ fontFamily: 'var(--text-mono)', fontSize: '9px' }}>
-                {lastUpdated.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: '9px', letterSpacing: '0.22em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Fleet · {shipments.length} routes
               </span>
-            )}
+              {lastUpdated && (
+                <span style={{ fontFamily: 'var(--text-mono)', fontSize: '9px', color: 'var(--text-muted)' }}>
+                  {lastUpdated.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              )}
+            </div>
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                onClick={() => exportFleetCSV(shipments)}
+                style={{ flex: 1, padding: '6px 0', background: 'none', border: '1px solid var(--border-bright)', color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '9px', letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: '3px', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--neon-cyan)'; e.currentTarget.style.color = 'var(--neon-cyan)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-bright)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+              >↓ Export CSV</button>
+              {delayedShipments.length > 0 && (
+                <button
+                  onClick={() => setContactShip(delayedShipments[0])}
+                  style={{ flex: 1, padding: '6px 0', background: 'var(--neon-red-dim)', border: '1px solid var(--neon-red)', color: 'var(--neon-red)', cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '9px', letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: '3px', animation: 'blink 2s ease-in-out infinite' }}
+                >⚠ Alert {delayedShipments.length} Delayed</button>
+              )}
+            </div>
           </div>
 
           {/* Shipment list */}
@@ -77,13 +91,14 @@ export default function FleetPage({ shipments, lastUpdated, latencyMs, error, up
                   selected={selectedId === ship.shipmentId}
                   onClick={() => setSelectedId(prev => prev === ship.shipmentId ? null : ship.shipmentId)}
                   onViewDetails={id => setDetailPageId(id)}
+                  onContact={ship => setContactShip(ship)}
                 />
               ))
             )}
           </div>
         </aside>
 
-        {/* ── Main map + panels ── */}
+        {/* ── Main: map + event log ── */}
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
           <MapView shipments={shipments} selectedId={selectedId} />
 
@@ -92,7 +107,7 @@ export default function FleetPage({ shipments, lastUpdated, latencyMs, error, up
             <div
               onClick={() => setLogOpen(o => !o)}
               style={{
-                padding: '6px 16px', background: 'var(--bg-panel)',
+                padding: '7px 18px', background: 'var(--bg-panel)',
                 borderTop: '1px solid var(--border)', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '8px',
                 fontFamily: 'var(--font-display)', fontSize: '9px',
@@ -102,7 +117,7 @@ export default function FleetPage({ shipments, lastUpdated, latencyMs, error, up
             >
               <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--neon-cyan)', animation: 'blink 1s infinite' }} />
               Event Stream
-              <span style={{ marginLeft: 'auto' }}>{logOpen ? '▼' : '▲'}</span>
+              <span style={{ marginLeft: 'auto', fontSize: '11px' }}>{logOpen ? '▼ collapse' : '▲ expand'}</span>
             </div>
             {logOpen && <EventLog shipments={shipments} />}
           </div>
@@ -113,10 +128,16 @@ export default function FleetPage({ shipments, lastUpdated, latencyMs, error, up
               shipment={selectedShipment}
               onClose={() => setSelectedId(null)}
               onUpdateDelay={updateDelay}
+              onContact={ship => setContactShip(ship)}
             />
           )}
         </main>
       </div>
+
+      {/* Contact overlay (global, above everything) */}
+      {contactShip && (
+        <ContactOverlay shipment={contactShip} onClose={() => setContactShip(null)} />
+      )}
     </div>
   );
 }

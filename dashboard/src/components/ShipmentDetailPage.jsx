@@ -3,6 +3,8 @@
 
 import React, { useState } from 'react';
 import { ROUTES_DATA, CONTACTS, COORDINATORS, CUSTOMERS, VEHICLES } from '../lib/mockData.js';
+import { exportShipmentCSV } from '../lib/export.js';
+import ContactOverlay from './ContactOverlay.jsx';
 
 const STATUS_COLOR = {
   IN_TRANSIT:    'var(--neon-cyan)',
@@ -159,7 +161,8 @@ function DocumentBadge({ doc }) {
 const TABS = ['Overview', 'Route & Timeline', 'Cargo & Documents', 'Contacts', 'Vehicle'];
 
 export default function ShipmentDetailPage({ shipment, onBack }) {
-  const [tab, setTab] = useState('Overview');
+  const [tab,          setTab]          = useState('Overview');
+  const [showContact,  setShowContact]  = useState(false);
   if (!shipment) return null;
 
   const id    = shipment.shipmentId;
@@ -206,16 +209,14 @@ export default function ShipmentDetailPage({ shipment, onBack }) {
         <div style={{ fontFamily: 'var(--text-mono)', fontSize: '16px', color: statusColor, letterSpacing: '0.1em' }}>{id}</div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: '13px', color: 'var(--text-secondary)' }}>{r.label}</div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{
-            padding: '3px 10px', border: `1px solid ${priorityColor}`,
-            fontFamily: 'var(--font-display)', fontSize: '9px', letterSpacing: '0.15em',
-            color: priorityColor, textTransform: 'uppercase', borderRadius: '2px',
-          }}>{r.priority}</span>
-          <span style={{
-            padding: '3px 10px', border: `1px solid ${statusColor}`,
-            fontFamily: 'var(--font-display)', fontSize: '9px', letterSpacing: '0.15em',
-            color: statusColor, textTransform: 'uppercase', borderRadius: '2px',
-          }}>{shipment.status.replace('_', ' ')}</span>
+          <span style={{ padding: '3px 10px', border: `1px solid ${priorityColor}`, fontFamily: 'var(--font-display)', fontSize: '9px', letterSpacing: '0.15em', color: priorityColor, textTransform: 'uppercase', borderRadius: '2px' }}>{r.priority}</span>
+          <span style={{ padding: '3px 10px', border: `1px solid ${statusColor}`, fontFamily: 'var(--font-display)', fontSize: '9px', letterSpacing: '0.15em', color: statusColor, textTransform: 'uppercase', borderRadius: '2px' }}>{shipment.status.replace('_', ' ')}</span>
+          <button onClick={() => setShowContact(true)} style={{ background: 'none', border: `1px solid ${shipment.isDelayed ? 'var(--neon-red)' : 'var(--neon-cyan)'}`, color: shipment.isDelayed ? 'var(--neon-red)' : 'var(--neon-cyan)', cursor: 'pointer', padding: '4px 12px', fontFamily: 'var(--font-display)', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: '2px' }}>
+            📞 Contact
+          </button>
+          <button onClick={() => exportShipmentCSV(shipment, r)} style={{ background: 'none', border: '1px solid var(--border-bright)', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 12px', fontFamily: 'var(--font-display)', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: '2px' }}>
+            ↓ Export
+          </button>
         </div>
       </div>
 
@@ -435,6 +436,7 @@ export default function ShipmentDetailPage({ shipment, onBack }) {
           </div>
         )}
 
+        {/* ─── CONTACTS tab improvements ─── */}
         {/* ─── VEHICLE ─── */}
         {tab === 'Vehicle' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -476,6 +478,8 @@ export default function ShipmentDetailPage({ shipment, onBack }) {
           </div>
         )}
       </div>
+
+      {showContact && <ContactOverlay shipment={shipment} onClose={() => setShowContact(false)} />}
     </div>
   );
 }
