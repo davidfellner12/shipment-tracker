@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Presentation Script — Real-Time Shipment Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    font-size: 11pt;
+    line-height: 1.65;
+    color: #1a1a2e;
+    background: #fff;
+    padding: 40px;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .cover {
+    text-align: center;
+    padding: 60px 0 50px;
+    border-bottom: 3px solid #232f3e;
+    margin-bottom: 36px;
+  }
+  .cover .tag {
+    font-size: 9pt;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #ff9900;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .cover h1 {
+    font-size: 24pt;
+    font-weight: 700;
+    color: #232f3e;
+    margin-bottom: 8px;
+  }
+  .cover .subtitle {
+    font-size: 12pt;
+    color: #555;
+    margin-bottom: 20px;
+  }
+  .cover .meta {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    font-size: 10pt;
+    color: #444;
+  }
+
+  .part {
+    background: #232f3e;
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-size: 13pt;
+    font-weight: 700;
+    margin: 32px 0 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .part .duration {
+    font-size: 10pt;
+    font-weight: 400;
+    color: #ff9900;
+  }
+
+  h2 {
+    font-size: 13pt;
+    font-weight: 700;
+    color: #232f3e;
+    margin: 24px 0 8px;
+    border-left: 4px solid #ff9900;
+    padding-left: 10px;
+  }
+
+  h3 {
+    font-size: 11pt;
+    font-weight: 700;
+    color: #ff9900;
+    margin: 18px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  blockquote {
+    background: #f5f8ff;
+    border-left: 4px solid #4a90d9;
+    padding: 12px 16px;
+    margin: 8px 0 14px;
+    border-radius: 0 6px 6px 0;
+    font-style: italic;
+    color: #2c3e50;
+  }
+
+  .stage {
+    background: #fff8e1;
+    border: 1px dashed #f0a500;
+    border-radius: 5px;
+    padding: 8px 14px;
+    font-size: 9.5pt;
+    color: #7a5c00;
+    margin: 6px 0 12px;
+  }
+  .stage::before { content: "▶  ACTION: "; font-weight: 600; }
+
+  .arch {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    font-family: 'Courier New', monospace;
+    font-size: 9.5pt;
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin: 10px 0 16px;
+    line-height: 1.8;
+    white-space: pre;
+  }
+
+  .qa {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin: 12px 0;
+    overflow: hidden;
+  }
+  .qa .question {
+    background: #232f3e;
+    color: #ff9900;
+    font-weight: 600;
+    font-size: 10.5pt;
+    padding: 9px 16px;
+  }
+  .qa .answer {
+    padding: 10px 16px;
+    font-size: 10.5pt;
+    color: #2c3e50;
+    background: #fafafa;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 10.5pt;
+  }
+  th {
+    background: #232f3e;
+    color: #fff;
+    padding: 9px 14px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td { padding: 8px 14px; border-bottom: 1px solid #eee; }
+  tr:nth-child(even) td { background: #f7f7f7; }
+  tr:last-child td { background: #fff3cd; font-weight: 700; border-bottom: none; }
+
+  .tip {
+    background: #e8f5e9;
+    border-left: 4px solid #2e7d32;
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    font-size: 10pt;
+    color: #1b5e20;
+    margin: 20px 0;
+  }
+  .tip strong { display: block; margin-bottom: 4px; }
+
+  @media print {
+    body { padding: 20px; font-size: 10pt; }
+    .cover { padding: 30px 0 30px; }
+    .qa { break-inside: avoid; }
+    blockquote { break-inside: avoid; }
+  }
+
+  p { margin-bottom: 8px; }
+  ul, ol { margin: 6px 0 10px 20px; }
+  li { margin-bottom: 4px; }
+  hr { border: none; border-top: 1px solid #e0e0e0; margin: 28px 0; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="tag">TU Wien × Amazon Web Services 2026</div>
+  <h1>Real-Time Shipment Tracker</h1>
+  <div class="subtitle">Presentation Script — Group 8</div>
+  <div class="meta">
+    <span>David Fellner</span>
+    <span>June 26, 2026 &nbsp;·&nbsp; 12:00–12:25</span>
+    <span>FAV HS2</span>
+  </div>
+</div>
+
+<div class="part">
+  PART 1 — Use Case &amp; Architecture
+  <span class="duration">~8 minutes</span>
+</div>
+
+<h2>Opening (30 sec)</h2>
+<blockquote>
+  "Hello everyone. My name is David Fellner and my project is a Real-Time Shipment Tracker — a fully serverless AWS pipeline that ingests live GPS events from delivery vehicles, processes them in real time, and displays them on a live map dashboard."
+</blockquote>
+
+<h2>Problem &amp; Use Case (1.5 min)</h2>
+<blockquote>
+  "Imagine you run a logistics company with 50 trucks driving across Europe. Your customers want to know: where is my shipment right now, and will it arrive on time?<br><br>
+  The challenge: GPS devices send position updates every few seconds — thousands of events per minute. You need infrastructure that:
+  <ul>
+    <li><strong>scales</strong> as your fleet grows,</li>
+    <li><strong>loses no data</strong>, even if a device briefly disconnects,</li>
+    <li>is <strong>cheap</strong> — you don't want to run servers 24/7 for a fluctuating workload,</li>
+    <li>and reacts <strong>in real time</strong>, not with a 10-minute delay.</li>
+  </ul>
+  That's exactly what this system solves."
+</blockquote>
+
+<h2>Architecture — Service by Service (5 min)</h2>
+<blockquote>"Let me walk through the architecture. Every service choice has a concrete reason."</blockquote>
+
+<div class="arch">Python Simulator  →  AWS IoT Core  →  Amazon Kinesis Data Streams
+                                              ↓
+                              AWS Lambda (process_event)  →  Amazon DynamoDB
+                                                                     ↓
+                              API Gateway  →  AWS Lambda (get_shipments)  →  React Dashboard (Amplify)</div>
+
+<h3>AWS IoT Core</h3>
+<blockquote>
+  "GPS devices connect via MQTT — the standard IoT protocol, ultra-lightweight and resilient on poor connections. I chose IoT Core over sending directly to Kinesis because IoT Core provides certificate-based device authentication — each device has its own TLS certificate, no passwords or API keys that could be stolen. The built-in Rules Engine forwards MQTT messages to Kinesis with zero custom code."
+</blockquote>
+
+<h3>Amazon Kinesis Data Streams</h3>
+<blockquote>
+  "Events land in Kinesis — an ordered, replayable data stream. Why not SQS? SQS is a queue for individual tasks. Kinesis is better for continuous high-volume data streams like GPS updates. Key advantage: if Lambda fails, Kinesis replays the events automatically — no data loss. I use On-Demand mode, so it scales automatically with traffic."
+</blockquote>
+
+<h3>AWS Lambda — process_event</h3>
+<blockquote>
+  "Kinesis triggers a Lambda function that processes each GPS event: parses coordinates, calculates status — on time, delayed, arriving soon — and writes the result to DynamoDB. Why Lambda over EC2? No persistent compute needed. Lambda runs only when events arrive and I pay per invocation only. Perfect for spiky, event-driven workloads."
+</blockquote>
+
+<h3>Amazon DynamoDB</h3>
+<blockquote>
+  "Processed shipment data is stored in DynamoDB, keyed by shipmentId. Each GPS update overwrites the current position. Why not RDS? My access pattern is simple — fetch by ID or fetch all — no joins, no SQL needed. DynamoDB gives me single-digit millisecond latency and is also serverless."
+</blockquote>
+
+<h3>API Gateway + React Dashboard</h3>
+<blockquote>
+  "The frontend polls a REST endpoint via API Gateway and a second Lambda every few seconds. The React dashboard with Leaflet maps renders each shipment as a colored pulsing marker — cyan for in-transit, green for on-time, red for delayed. Hosted on AWS Amplify for automatic HTTPS and CDN delivery."
+</blockquote>
+
+<h2>Well-Architected Pillars (1.5 min)</h2>
+
+<h3>Cost Optimization</h3>
+<blockquote>
+  "The entire stack is serverless — I pay exactly proportional to usage. No idle servers. For this PoC the total cost is under $5, even with hours of testing. Kinesis On-Demand, Lambda per-invocation pricing, DynamoDB On-Demand — all elastic."
+</blockquote>
+
+<h3>Security</h3>
+<blockquote>
+  "Three layers: First, IoT Core uses X.509 certificate authentication — no device connects without a valid certificate. Second, IAM Least Privilege — the processing Lambda can only write to DynamoDB, nothing else. Third, no hardcoded credentials — all endpoints and keys come from CDK outputs and environment variables, never in source code."
+</blockquote>
+
+<div class="part">
+  PART 2 — Live Demo
+  <span class="duration">~8 minutes</span>
+</div>
+
+<h2>Step 1 — Start the Simulator</h2>
+<blockquote>
+  "This is the Python simulator. It simulates delivery vehicles sending GPS coordinates to AWS IoT Core over MQTT. You can see the events firing in real time — each line is a position update from a different vehicle."
+</blockquote>
+<div class="stage">Start simulator — show terminal output with GPS events firing</div>
+
+<h2>Step 2 — Open the Dashboard</h2>
+<blockquote>
+  "Here's the live dashboard. The map shows Europe — and you can see the vehicles updating their positions in real time. Blue pulsing markers are in-transit, green means arriving soon."
+</blockquote>
+<div class="stage">Open browser — show map with live moving markers</div>
+
+<h2>Step 3 — Click a Shipment</h2>
+<blockquote>
+  "I'll click on a marker. You get full details — the route, current speed, cargo type, progress percentage, and ETA in minutes. This all comes live from DynamoDB via the API."
+</blockquote>
+<div class="stage">Click a marker — show popup with shipment details</div>
+
+<h2>Step 4 — Trigger a Delay</h2>
+<blockquote>
+  "Now I'll simulate a delay for SHIP-002."
+</blockquote>
+<div class="stage">Run in terminal: python simulator.py --delay SHIP-002</div>
+<blockquote>
+  "The marker switches to red — status changes to DELAYED — and the ETA increases. No manual refresh, this updates automatically."
+</blockquote>
+
+<h2>Step 5 — Show the CDK Stack</h2>
+<blockquote>
+  "Quick look at the infrastructure code. This entire AWS setup — IoT Core, Kinesis, two Lambdas, DynamoDB, API Gateway — is defined in roughly 100 lines of Python CDK. One cdk deploy command builds everything from scratch. Fully reproducible, no manual console clicking."
+</blockquote>
+<div class="stage">Show CDK stack file briefly in editor</div>
+
+<div class="part">
+  PART 3 — Q&amp;A Preparation
+  <span class="duration">~5 minutes</span>
+</div>
+
+<div class="qa">
+  <div class="question">Why Kinesis and not SQS?</div>
+  <div class="answer">SQS delivers each message once and deletes it. Kinesis is a stream — ordered, replayable, supports multiple consumers reading independently. For continuous GPS data at scale, Kinesis is the right tool.</div>
+</div>
+
+<div class="qa">
+  <div class="question">Why not WebSockets instead of polling?</div>
+  <div class="answer">WebSockets would be the production upgrade — AWS API Gateway supports WebSocket APIs natively. For this PoC, polling every 5 seconds is sufficient for GPS update frequency and much simpler to implement. I'd switch for production.</div>
+</div>
+
+<div class="qa">
+  <div class="question">What happens if Lambda crashes?</div>
+  <div class="answer">Kinesis retains events for up to 7 days and retries failed Lambda batches automatically. No data is lost — it's built into the Kinesis-Lambda integration.</div>
+</div>
+
+<div class="qa">
+  <div class="question">Could this scale to 5,000 trucks?</div>
+  <div class="answer">Yes, without architecture changes. Kinesis On-Demand handles ingestion scaling, Lambda scales per shard, DynamoDB On-Demand scales automatically. The architecture is designed for this.</div>
+</div>
+
+<div class="qa">
+  <div class="question">Why DynamoDB over Timestream?</div>
+  <div class="answer">Timestream would be better for querying historical routes. My requirement is only the current state of each shipment — no history queries needed. DynamoDB is cheaper and simpler for this access pattern.</div>
+</div>
+
+<hr/>
+
+<h2>Timing Summary</h2>
+<table>
+  <thead>
+    <tr><th>Section</th><th>Content</th><th>Time</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Opening + Use Case</td><td>Problem statement</td><td>2 min</td></tr>
+    <tr><td>Architecture</td><td>Service-by-service with justifications</td><td>5 min</td></tr>
+    <tr><td>Well-Architected</td><td>Cost Optimization + Security</td><td>1.5 min</td></tr>
+    <tr><td>Live Demo</td><td>Simulator → Dashboard → Delay → CDK</td><td>8 min</td></tr>
+    <tr><td>Q&amp;A</td><td>Short questions from audience</td><td>~5 min</td></tr>
+    <tr><td>Total</td><td></td><td>~22 min</td></tr>
+  </tbody>
+</table>
+
+<div class="tip">
+  <strong>Tip for your slot (12:00)</strong>
+  You're the last solo presenter — the audience will have been sitting for 3 hours. Keep energy up during the demo. The live map with real-time marker updates always lands well with an audience.
+</div>
+
+</body>
+</html>
