@@ -1,73 +1,59 @@
-# Tracelane — Real-Time Shipment Tracker
+# Tracelane — Serverless Real-Time Freight Visibility
 
-Live tracking, predictive ETAs and customer reporting for European road freight, on AWS serverless.
-TU Wien × AWS 2026 · David Fellner
+A serverless AWS pipeline that tracks trucks in real time and predicts arrival times using the operating
+rules of European road freight, evaluated on a fleet simulator built on real road geometry.
+David Fellner · TU Wien × AWS · 2026 · **[Technical report (PDF)](report/report.pdf)**
 
-## Start the app locally (no AWS needed)
+![Operator control tower](docs/img/ui_operator.png)
 
-Requires **Node.js 18+**.
+## Key results
 
+From `evaluation/run_experiments.py` (5 seeds × 30 simulated days, 11,139 deliveries):
+
+| | Result |
+|---|---|
+| **ETA prediction** | Mean error at 10 % of the route: **27 min** with driving-time rules vs. **220 min** for distance ÷ speed (8×); 85 % vs. 46 % within 30 min |
+| **Correctness under faults** | With 20 % duplicates, 2 % malformed messages and reordering, **302 / 302** shipments reach the identical final state; all malformed messages go to the dead-letter queue |
+| **Bugs found by the evaluation** | An inconsistency in the ETA predictor's driving-hours logic and an order-dependent metric, both fixed (report §4.1, §4.3) |
+| **Planning policy** | On-time rate ranges from 48 % to 98 % depending on the dispatcher's buffers, traded against idle time |
+| **Throughput** | Measured 1.76 KB messages → about 17,000 trucks per Kinesis shard at 30 s reporting |
+
+The data is synthetic: the predictor shares the simulator's rules, so ETA accuracy is an upper bound, not real-world accuracy (report §5).
+
+## Run it
+
+**Demo (no AWS, Node.js 18+):**
 ```bash
-cd dashboard
-npm install
-npm run dev
+cd dashboard && npm install && npm run dev      # http://localhost:3000  (add /app?speed=30 to fast-forward)
 ```
 
-Open **http://localhost:3000**. The dashboard runs a simulated fleet of 40 trucks on real European
-roads directly in your browser, in real time, with 30 days of history.
-For a faster-moving demo, open **http://localhost:3000/app?speed=30**.
-
-## Run it on AWS
-
-Requires the **AWS CLI** (`aws configure`, region `eu-central-1`), **Python 3.11+**, and **CDK** (`npm i -g aws-cdk`).
-
-```bash
-# 1. Build the dashboard
-cd dashboard && npm install && npm run build && cd ..
-
-# 2. Deploy (≈10 min). Confirm the two emails from AWS afterwards.
-cd infrastructure
-pip install -r requirements.txt
-cdk bootstrap                                  # first time only
-cdk deploy -c alertEmail=you@example.com
-cd ..
-
-# 3. Create the simulator's device certificate
-pip install boto3
-python scripts/provision_device.py
-
-# 4. Start the fleet simulator (first start publishes 30 days of history)
-cd simulator
-pip install -r requirements.txt
-python simulator.py                          # real time, one report per truck every 30 s
-# python simulator.py --speed 30 --interval 3  # fast-forward for a live demo
-```
-
-Open the `DashboardUrl` printed by `cdk deploy`.
-
-**Flagging a shipment** from the dashboard needs the operator API key:
-`aws apigateway get-api-key --api-key <OperatorApiKeyId> --include-value --query value --output text`
-
-**Stop paying when done:**
-`python scripts/provision_device.py --revoke`, then `cd infrastructure && cdk destroy`.
-
-## Test
-
+**Reproduce the results and the report (Python 3.11+):**
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest tests -q
+python -m pytest tests -q                        # Lambda, simulator and infrastructure tests
+python evaluation/run_experiments.py             # ≈ 5 min, writes evaluation/results/ and report/figures/
+cd report && npm install && cd .. && python report/build.py   # report.pdf (uses a local Edge/Chrome)
 ```
 
-## Project layout
+**Deploy to AWS (CLI configured, `npm i -g aws-cdk`):**
+```bash
+cd dashboard && npm run build && cd ../infrastructure
+pip install -r requirements.txt && cdk bootstrap && cdk deploy -c alertEmail=you@example.com
+cd .. && python scripts/provision_device.py && python simulator/simulator.py
+```
+Tear down afterwards with `python scripts/provision_device.py --revoke` and `cdk destroy`.
+
+## Repository
 
 | Folder | Contents |
 |---|---|
-| `dashboard/` | React app (landing page, operator control tower, customer portal, public tracking) |
-| `simulator/` | Fleet simulation engine + MQTT publisher |
-| `lambda/` | `process_event` (ingest), `api` (read + metrics), `update_shipment` (flag) |
-| `infrastructure/` | AWS CDK stack |
-| `shared/` | Road network, fictional customers/fleet, simulation parameters |
-| `scripts/` | Device provisioning, network/catalog generators |
+| `lambda/` | Ingestion (`process_event`), read API and metrics (`api`), operator flag (`update_shipment`) |
+| `infrastructure/` | AWS CDK stack: IoT Core, Kinesis, Lambda, DynamoDB, API Gateway, CloudFront, alarms |
+| `simulator/` | Fleet simulation engine and MQTT publisher |
+| `dashboard/` | React web app: operator view, customer portal, public tracking (+ JS port of the engine for the demo) |
+| `evaluation/`, `report/` | Experiments and the generated technical report |
+| `shared/` | Road network (37 hubs, 156 lanes), fictional catalog, simulation parameters |
 | `docs/` | [AWS services explained](docs/AWS_SERVICES.md) |
 
-All companies, people and plates in the demo data are fictional.
+Road geometry © OpenStreetMap contributors (ODbL) via OSRM; country boundaries © Natural Earth; map tiles © OpenFreeMap.
+All companies, people and shipments in the demo are fictional.

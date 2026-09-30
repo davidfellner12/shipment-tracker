@@ -125,19 +125,36 @@ def upsert_state(msg: dict, now: int) -> None:
     names  = {f"#a{i}": k for i, k in enumerate(item)}
     values = {f":v{i}": v for i, v in enumerate(item.values())}
     sets   = [f"#a{i} = :v{i}" for i in range(len(item))]
-    # ETA predicted when the truck passed halfway — used for the ETA-accuracy KPI
-    if float(msg.get("progress", 0)) >= 0.5 and msg["status"] != "DELIVERED":
-        names["#half"], values[":half"] = "etaAtHalfway", msg["etaAt"]
-        sets.append("#half = if_not_exists(#half, :half)")
     seq_ref = next(n for n, k in names.items() if k == "seq")
 
     table.update_item(
         Key={"shipmentId": msg["shipmentId"]},
         UpdateExpression="SET " + ", ".join(sets),
-        ConditionExpression=f"attribute_not_exists(shipmentId) OR {seq_ref} < :newseq",
+        # no seq yet (new shipment, or only the halfway ETA recorded) or an older one
+        ConditionExpression=f"attribute_not_exists({seq_ref}) OR {seq_ref} < :newseq",
         ExpressionAttributeNames=names,
         ExpressionAttributeValues={**values, ":newseq": msg["seq"]},
     )
+
+
+def record_halfway_eta(msg: dict) -> None:
+    """Keep the ETA predicted when the truck passed halfway (for the ETA-accuracy KPI).
+
+    Must not depend on arrival order: of all messages in the halfway window, the one
+    with the lowest sequence number wins, enforced by a conditional write."""
+    progress = float(msg.get("progress", 0))
+    if not (0.5 <= progress < 0.65) or msg["status"] == "DELIVERED":
+        return
+    try:
+        table.update_item(
+            Key={"shipmentId": msg["shipmentId"]},
+            UpdateExpression="SET etaAtHalfway = :eta, halfwaySeq = :seq",
+            ConditionExpression="attribute_not_exists(halfwaySeq) OR halfwaySeq > :seq",
+            ExpressionAttributeValues={":eta": msg["etaAt"], ":seq": msg["seq"]},
+        )
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
 
 
 def send_to_dlq(record: dict, reason: str) -> None:
@@ -165,6 +182,7 @@ def handler(event, context):
             msg = parse_record(record)
             sid = msg["shipmentId"]
             write_events(msg, now)
+            record_halfway_eta(msg)
             upsert_state(msg, now)
             success += 1
         except InvalidEvent as exc:

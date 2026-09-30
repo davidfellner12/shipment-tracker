@@ -41,8 +41,10 @@ export default function System() {
       </PageHeader>
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Kpi icon={Timer} label="Ingest latency p50" value={num(percentile(lat, 0.5))} unit="ms" context="device → DynamoDB" loading={!data} />
-        <Kpi icon={Gauge} label="Ingest latency p95" value={num(percentile(lat, 0.95))} unit="ms" context="target: end-to-end < 5 s" loading={!data} />
+        <Kpi icon={Timer} label="Ingest latency p50" value={lat.length ? num(percentile(lat, 0.5)) : 'n/a'} unit={lat.length ? 'ms' : ''}
+          context={lat.length ? 'device → DynamoDB' : 'measured only when deployed on AWS'} loading={!data} />
+        <Kpi icon={Gauge} label="Ingest latency p95" value={lat.length ? num(percentile(lat, 0.95)) : 'n/a'} unit={lat.length ? 'ms' : ''}
+          context="design target: end-to-end < 5 s" loading={!data} />
         <Kpi icon={Activity} label="Trucks reporting" value={`${live.length - lost}/${live.length}`} loading={!data}
           context={lost ? `${lost} with signal lost` : 'all transmitting'} tone={lost ? 'critical' : 'good'} />
         <Kpi icon={Radio} label="Last message" value={freshest ? ago(freshest) : '—'} loading={!data} context="dashboard polls every 2 s" />

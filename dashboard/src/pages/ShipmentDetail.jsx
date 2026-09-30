@@ -185,7 +185,7 @@ export default function ShipmentDetail() {
             <Field label="Energy">{num(t.fuelUnits)} {t.fuelUnit}</Field>
             <Field label="Powertrain">{FUEL[s.fuelType] || s.fuelType}</Field>
           </div>
-          <p className="mt-3 text-[11px] text-ink-3">Well-to-wheel, GLEC-aligned factors. Planned total {num(tkm)} tkm.</p>
+          <p className="mt-3 text-[11px] text-ink-3">Well-to-wheel, factors approximated from GLEC. Planned total {num(tkm)} tkm.</p>
         </Card>
 
         <Card title="Delays on route" action={<Timer size={16} className="text-ink-3" />}>

@@ -75,7 +75,7 @@ def scan_all() -> list[dict]:
     while "LastEvaluatedKey" in result:
         result = table.scan(ExclusiveStartKey=result["LastEvaluatedKey"])
         items.extend(result.get("Items", []))
-    return items
+    return [i for i in items if "seq" in i]   # skip partial items with no telemetry yet
 
 
 def int_param(params: dict, name: str, default: int, lo: int, hi: int) -> int:

@@ -1,7 +1,7 @@
 // JavaScript port of lambda/api/views.py — shipment views + KPI computation for mock mode.
 // Keep in sync with the Python original (the source of truth for the deployed API).
 
-const INTERNAL = new Set(['ttl', 'manualDelay', 'delayReason', 'updatedBy', 'manualUpdatedAt', 'etaAtHalfway']);
+const INTERNAL = new Set(['ttl', 'manualDelay', 'delayReason', 'updatedBy', 'manualUpdatedAt', 'etaAtHalfway', 'halfwaySeq']);
 const SIGNAL_LOST_AFTER_S = 5 * 60;
 const CAUSE_LABELS = { customs: 'Customs clearance', spotCheck: 'Border spot checks', traffic: 'Traffic congestion' };
 

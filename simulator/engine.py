@@ -213,18 +213,25 @@ class Fleet:
         return total
 
     def _hos_wait(self, drive_min: float, since: float, today: float) -> float:
+        """Minutes of mandatory breaks/rests needed to drive `drive_min` more minutes.
+
+        Mirrors the decision order of _drive() exactly: arrive if done; daily rest if the
+        daily limit is reached and the trip cannot be finished within the 10 h extension;
+        otherwise a 45 min break when 4.5 h of continuous driving are reached."""
         hos, wait = self.params["hos"], 0.0
-        while drive_min > 0:
-            # the daily limit may be extended to finish the trip
-            if drive_min <= min(hos["maxContinuousDrivingMin"] - since, hos["extendedDailyDrivingMin"] - today):
-                break
-            can = min(hos["maxContinuousDrivingMin"] - since, hos["maxDailyDrivingMin"] - today)
-            drive_min -= max(can, 0)
-            today += max(can, 0)
-            if today >= hos["maxDailyDrivingMin"]:
-                wait, since, today = wait + hos["dailyRestMin"], 0, 0
-            else:
-                wait, since = wait + hos["breakMin"], 0
+        while drive_min > 1e-9:
+            extend = drive_min <= hos["extendedDailyDrivingMin"] - today
+            if today >= hos["maxDailyDrivingMin"] and not extend:
+                wait, since, today = wait + hos["dailyRestMin"], 0.0, 0.0
+                continue
+            if since >= hos["maxContinuousDrivingMin"]:
+                wait, since = wait + hos["breakMin"], 0.0
+                continue
+            limits = [drive_min, hos["maxContinuousDrivingMin"] - since]
+            if today < hos["maxDailyDrivingMin"]:
+                limits.append(hos["maxDailyDrivingMin"] - today)
+            step = min(limits)
+            drive_min, since, today = drive_min - step, since + step, today + step
         return wait
 
     def _event(self, v: dict, kind: str, data: dict | None = None) -> None:

@@ -12,7 +12,7 @@ Every KPI is derived from what the pipeline actually recorded:
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
-INTERNAL = {"ttl", "manualDelay", "delayReason", "updatedBy", "manualUpdatedAt", "etaAtHalfway"}
+INTERNAL = {"ttl", "manualDelay", "delayReason", "updatedBy", "manualUpdatedAt", "etaAtHalfway", "halfwaySeq"}
 SIGNAL_LOST_AFTER_S = 5 * 60
 CAUSE_LABELS = {"customs": "Customs clearance", "spotCheck": "Border spot checks", "traffic": "Traffic congestion"}
 

@@ -1,0 +1,9 @@
+{
+  "name": "tracelane-report",
+  "private": true,
+  "type": "module",
+  "description": "Prints report.html to report.pdf (python report/build.py calls this).",
+  "devDependencies": {
+    "playwright-core": "^1.55.0"
+  }
+}

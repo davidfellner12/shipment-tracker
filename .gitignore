@@ -24,3 +24,8 @@ simulator/.env
 
 # Simulator runtime state
 simulator/.state.json
+.idea/
+
+# Report build
+report/node_modules/
+report/report.html

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tracelane — Serverless Real-Time Freight Visibility</title>
+<style>
+  @page { size: A4; }
+  :root { --ink: #0f172a; --ink2: #334155; --ink3: #64748b; --line: #cbd5e1; --accent: #4f46e5; }
+  html { font-family: "Cambria", "Georgia", "Times New Roman", serif; font-size: 10pt; color: var(--ink); line-height: 1.42; }
+  body { margin: 0; }
+  h1 { font-family: "Segoe UI", "Inter", sans-serif; font-size: 17pt; line-height: 1.2; margin: 0 0 4pt; letter-spacing: -0.01em; }
+  h2 { font-family: "Segoe UI", "Inter", sans-serif; font-size: 11.5pt; margin: 14pt 0 4pt; }
+  h3 { font-family: "Segoe UI", "Inter", sans-serif; font-size: 10pt; margin: 9pt 0 2pt; }
+  p { margin: 0 0 6pt; text-align: justify; hyphens: auto; }
+  .meta { font-family: "Segoe UI", sans-serif; font-size: 9pt; color: var(--ink2); margin-bottom: 10pt; }
+  .abstract { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 7pt 0; margin: 8pt 0 6pt; font-size: 9.5pt; }
+  .abstract b { font-family: "Segoe UI", sans-serif; }
+  ul, ol { margin: 0 0 6pt; padding-left: 16pt; }
+  li { margin-bottom: 2pt; }
+  table { border-collapse: collapse; width: 100%; font-size: 8.6pt; margin: 4pt 0 2pt; font-family: "Segoe UI", sans-serif; }
+  th { text-align: left; font-weight: 600; border-bottom: 1px solid var(--ink3); padding: 3pt 5pt; }
+  td { border-bottom: 1px solid #e2e8f0; padding: 2.5pt 5pt; vertical-align: top; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.best { font-weight: 700; }
+  .cap { font-size: 8.5pt; color: var(--ink2); margin: 2pt 0 9pt; text-align: left; }
+  .cap b { font-family: "Segoe UI", sans-serif; }
+  figure { margin: 6pt 0 0; break-inside: avoid; }
+  figure img { width: 100%; display: block; }
+  .keep { break-inside: avoid; }
+  code { font-family: Consolas, monospace; font-size: 8.5pt; background: #f1f5f9; padding: 0 2pt; border-radius: 2pt; }
+  .refs li { font-size: 8.6pt; margin-bottom: 3pt; }
+  /* architecture diagram */
+  .arch { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5pt; font-family: "Segoe UI", sans-serif; margin-top: 4pt; }
+  .arch div { border: 1px solid var(--line); border-radius: 4pt; padding: 5pt; font-size: 7.6pt; color: var(--ink2); position: relative; }
+  .arch b { display: block; color: var(--ink); font-size: 8pt; margin-bottom: 1pt; }
+  .arch div:not(:last-child)::after { content: "→"; position: absolute; right: -8pt; top: 40%; color: var(--ink3); font-size: 9pt; }
+  .side { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5pt; margin-top: 5pt; font-family: "Segoe UI", sans-serif; }
+  .side div { border: 1px dashed var(--line); border-radius: 4pt; padding: 4pt 5pt; font-size: 7.6pt; color: var(--ink2); }
+  .side b { color: var(--ink); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; }
+</style>
+</head>
+<body>
+
+<h1>Tracelane: A Serverless Pipeline for Real-Time Freight Visibility with Rule-Aware ETA Prediction</h1>
+<div class="meta">David Fellner · TU Wien · Course project, TU Wien × Amazon Web Services, 2026 · Code: <i>see repository README</i></div>
+
+<div class="abstract">
+<b>Abstract.</b> Road freight carriers often cannot tell customers where a shipment is or when it will arrive. I designed and
+implemented Tracelane, an end-to-end serverless system on AWS that ingests truck telemetry over MQTT, processes it with
+at-least-once semantics, and serves live tracking, predicted arrival times and service-level metrics to operators and their
+customers. Because real telematics data is proprietary, I built a fleet simulator on real European road geometry
+(${hubs} hubs, ${lanes} lanes, ${countries} countries) that models EU driving-time rules, border controls, traffic, refrigerated
+cargo and emissions, and serves as ground truth for evaluation. Over ${seeds} seeds × ${days} simulated days (${total_deliveries}
+deliveries), an ETA predictor that encodes driving-time rules and customs reduces the mean absolute error at 10&nbsp;% route
+progress from ${mae_naive_10} to ${mae_full_10} minutes compared with a distance/speed baseline (${ratio_10}×). A fault-injection experiment
+shows that the ingestion path converges to an identical state under duplicated, reordered and malformed messages; it also
+exposed an order-dependence bug, which I fixed. Limitations — above all, synthetic data — are discussed in Section&nbsp;5.
+</div>
+
+<h2>1&nbsp;&nbsp;Problem and goals</h2>
+<p>Visibility in road freight is still largely manual: dispatchers phone drivers and forward status by e-mail. The project
+brief (TU Wien × AWS) asked for a proof of concept that turns GPS events into a live dashboard. I extended the brief to four goals:
+<b>G1</b> low latency from GPS ping to screen (design target &lt; 5&nbsp;s); <b>G2</b> correct state under the at-least-once,
+possibly reordered delivery that MQTT and stream processing imply; <b>G3</b> information that is useful beyond a dot on a map —
+realistic arrival predictions and service metrics such as on-time rate and CO₂e; <b>G4</b> no servers to operate and
+cost proportional to use.</p>
+<p><b>Contributions.</b> (i) A serverless reference implementation, fully defined as infrastructure-as-code and covered by
+tests; (ii) an operational fleet simulator that produces realistic telemetry together with ground truth; (iii) a rule-aware ETA
+predictor with an ablation against a naive baseline; (iv) an order-independent, idempotent ingestion design validated by fault
+injection; (v) a web application with an operator control tower, a per-customer portal and public tracking links.</p>
+
+<h2>2&nbsp;&nbsp;System design</h2>
+<div class="keep">
+<div class="arch">
+  <div><b>Telematics / simulator</b>MQTT over TLS, one X.509 certificate per device</div>
+  <div><b>AWS IoT Core</b>least-privilege device policy; topic rule forwards to Kinesis</div>
+  <div><b>Kinesis Data Stream</b>ordered per shipment, 24&nbsp;h replay buffer</div>
+  <div><b>Lambda process_event</b>validate · de-duplicate · write state + events</div>
+  <div><b>DynamoDB</b>Shipments (current state) · ShipmentEvents (timeline)</div>
+  <div><b>API Gateway + Lambda</b>live board, timeline, <code>/metrics</code>; React app on CloudFront/S3</div>
+</div>
+<div class="side">
+  <div><b>Failure path:</b> invalid messages and exhausted retries go to an SQS dead-letter queue with an alarm.</div>
+  <div><b>Operations:</b> AWS CDK stack, CloudWatch alarms and dashboard, X-Ray tracing, budget alerts.</div>
+  <div><b>Security:</b> per-function IAM roles, encryption at rest and in transit, API key on writes.</div>
+</div>
+<div class="cap"><b>Figure 1.</b> Architecture. Every component is managed and billed per use; the whole stack deploys with one <code>cdk deploy</code>.</div>
+</div>
+
+<p><b>Key design decisions.</b></p>
+<table class="keep">
+  <tr><th style="width:24%">Decision</th><th style="width:26%">Alternative</th><th>Rationale</th></tr>
+  <tr><td>Kinesis between IoT Core and Lambda</td><td>IoT rule invoking Lambda directly</td><td>Buffers bursts, keeps per-shipment order (partition key), and allows replay after a bug fix; costs one shard-hour.</td></tr>
+  <tr><td>Per-shipment sequence numbers + conditional writes</td><td>Last-writer-wins on timestamps</td><td>Makes processing idempotent and order-safe under at-least-once delivery without a separate de-duplication store (G2).</td></tr>
+  <tr><td>Two tables: current state + event log</td><td>Single state table</td><td>O(1) reads for the live board; one ordered <code>Query</code> for a shipment's timeline; delivered records drive the KPIs.</td></tr>
+  <tr><td>DynamoDB on-demand</td><td>PostgreSQL (RDS)</td><td>Access is by key, no joins; no idle cost, no VPC or patching (G4).</td></tr>
+  <tr><td>2&nbsp;s REST polling</td><td>WebSocket push</td><td>Meets the 5&nbsp;s target with far less state (no connection table); push is future work.</td></tr>
+  <tr><td>Partial-batch failure reporting</td><td>Fail whole batch</td><td>Only records after a failure are retried; poison messages go straight to the dead-letter queue.</td></tr>
+</table>
+<div class="cap"><b>Table 1.</b> Design decisions and trade-offs.</div>
+
+<p><b>Read model.</b> The API derives everything a user sees from stored telemetry: predicted delay (ETA minus planned delivery),
+exceptions (late risk, temperature excursion, border hold, lost signal after 5&nbsp;min, operator flag) and severity. Operator-owned
+fields (a manual flag) are written by a separate endpoint and merged on read, so the next GPS ping cannot overwrite them.</p>
+
+<figure class="keep"><img src="../docs/img/ui_operator.png" alt="Operator control tower" style="border:1px solid #cbd5e1;border-radius:4pt"></figure>
+<div class="cap"><b>Figure 2.</b> Operator control tower: live fleet on real road geometry, KPIs computed from recorded telemetry, and
+exceptions ranked by severity. Shippers see the same data restricted to their own shipments; consignees get a public tracking page.</div>
+
+<h2>3&nbsp;&nbsp;Fleet simulation model</h2>
+<p>Real telematics data could not be obtained, and random-walk GPS points would make every metric meaningless. I therefore
+built a discrete-time simulator (1-minute steps) in which KPIs <i>emerge</i> from modelled operations. It is implemented once in
+Python (the device simulator) and ported to JavaScript for a zero-setup browser demo; both share one parameter file.</p>
+<ul>
+  <li><b>Network.</b> ${lanes} directed lanes between ${hubs} hubs (${lane_km_min}–${lane_km_max}&nbsp;km) follow truck-drivable road geometry from
+  OSRM on OpenStreetMap [4,5]; each lane is split into country segments (${country_list}) using Natural Earth boundaries [6].</li>
+  <li><b>Driving.</b> Cruise speed follows each country's truck speed limit plus limiter tolerance, urban speed near hubs, and
+  random congestion that is more likely near cities at rush hour.</li>
+  <li><b>Driving-time rules.</b> A simplified form of Regulation (EC) 561/2006 [1]: a 45-minute break after 4.5&nbsp;h of driving, an
+  11-hour rest after 9&nbsp;h, and an extension to 10&nbsp;h when it lets the driver finish the trip.</li>
+  <li><b>Borders.</b> Customs clearance whenever a lane enters or leaves Switzerland; random spot checks at Schengen internal borders.</li>
+  <li><b>Energy and emissions.</b> Consumption scales with payload; well-to-wheel factors for diesel, LNG, HVO and battery-electric
+  trucks are approximated from the GLEC Framework [2] (cf. ISO 14083 [3]); tolls use indicative per-country rates.</li>
+  <li><b>Cargo.</b> ${customers} fictional shippers in 12 industries with realistic goods (HS tariff codes, ADR classes for dangerous goods),
+  refrigerated loads whose units occasionally fail, and document sets that depend on route and cargo.</li>
+  <li><b>Planning.</b> When a load is assigned, a dispatcher plans the delivery time from expected drive time (scaled by a
+  traffic factor), the driver's remaining hours, expected customs time, unloading and a customer-specific booking slack.
+  On-time performance is therefore an outcome of planning policy versus stochastic events, not a random number.</li>
+</ul>
+<p>The fleet has ${trucks} trucks that chain loads: after delivery a truck takes its next job from the destination hub, so the
+network state evolves continuously. Aggregate outcomes (Table&nbsp;2) are stable across seeds.</p>
+
+<div class="two keep">
+<div>
+<table>
+  <tr><th>Outcome (${days}-day run)</th><th class="num">mean ± sd over ${seeds} seeds</th></tr>
+  ${outcome_rows}
+</table>
+<div class="cap"><b>Table 2.</b> Operational outcomes of the simulated fleet.</div>
+</div>
+<div>
+<figure><img src="figures/delay_distribution.svg" alt="Delay distribution"></figure>
+<div class="cap"><b>Figure 3.</b> Actual minus planned delivery time, all seeds.</div>
+</div>
+</div>
+
+<h2>4&nbsp;&nbsp;Evaluation</h2>
+<p>All experiments run from one script (<code>evaluation/run_experiments.py</code>) with fixed seeds; this report is generated from
+its output.</p>
+
+<h3>4.1&nbsp;&nbsp;ETA prediction</h3>
+<p>For every delivered shipment I record the arrival time predicted at 10, 25, 50, 75 and 90&nbsp;% of the route and compare it with
+the actual delivery time (n&nbsp;=&nbsp;${n_eta} shipments per checkpoint). The baseline is the method in the original project proposal:
+remaining distance divided by a constant speed. Three variants add one model component at a time; the last one is the predictor
+the system uses.</p>
+<table class="keep">
+  <tr><th>Predictor</th><th class="num">MAE @10&nbsp;%</th><th class="num">@25&nbsp;%</th><th class="num">@50&nbsp;%</th><th class="num">@75&nbsp;%</th><th class="num">@90&nbsp;%</th><th class="num">≤&nbsp;30&nbsp;min @50&nbsp;%</th><th class="num">P90 @50&nbsp;% (min)</th></tr>
+  ${eta_rows}
+</table>
+<div class="cap"><b>Table 3.</b> Mean absolute ETA error in minutes by route progress, and accuracy at mid-route.</div>
+<figure class="keep"><img src="figures/eta_error.svg" alt="ETA error by progress"></figure>
+<div class="cap"><b>Figure 4.</b> ETA error by route progress.</div>
+<p>Encoding driving-time rules is what matters: speed profiles and customs alone barely change the error, because the dominant
+source of error on long lanes is whether a mandatory break or an 11-hour rest lies ahead. At 10&nbsp;% progress the deployed predictor
+is within 30&nbsp;minutes for ${w30_full_10} of shipments (baseline: ${w30_naive_10}). ${near_dest_sentence}</p>
+<p><b>The evaluation found a bug.</b> A first run showed a cluster of predictions near the destination whose predicted arrival was about
+ten hours too <i>late</i>: when the daily driving limit and the 4.5-hour break limit fell close together, the predictor scheduled an 11-hour
+rest, while the driving model (correctly) let the driver take a 45-minute break and use the 10-hour extension. After rewriting the
+predictor to follow exactly the same decision order, ${over2h_full_90} of predictions at 90&nbsp;% progress miss by more than two hours;
+I inspected these cases for one seed (7 of 2,170 predictions): all seven had a traffic jam after the prediction, which in six cases
+consumed the time the driver needed to finish within the extension and forced a daily rest the predictor could not foresee.
+<b>Caveat:</b> the predictor shares the simulator's rules, so this experiment measures the value of encoding operational constraints,
+not accuracy on real roads (Section&nbsp;5).</p>
+
+<h3>4.2&nbsp;&nbsp;Planning policy and on-time performance</h3>
+<div class="two keep">
+<div>
+<p>Figure&nbsp;5 varies the dispatcher's traffic factor and the booking slack. With the defaults the on-time rate is ${sens_base}
+at a median early arrival of ${sens_base_early}&nbsp;min. Across the grid it ranges from ${sens_lo} to ${sens_hi}; buying the last points of
+on-time performance costs trucks waiting at the gate (median ${sens_hi_early}&nbsp;min early at the most conservative setting). For a
+carrier the relevant quantity is therefore not the on-time rate alone but its trade-off with idle time — which the metrics API makes
+visible per customer and lane.</p>
+</div>
+<div>
+<figure><img src="figures/sensitivity.svg" alt="Sensitivity"></figure>
+<div class="cap"><b>Figure 5.</b> On-time rate vs. planning traffic factor for three booking-slack levels (one seed, 14 days).</div>
+</div>
+</div>
+
+<h3>4.3&nbsp;&nbsp;Ingestion under faults</h3>
+<p>I fed the real <code>process_event</code> Lambda (against locally mocked DynamoDB and SQS) with ${e4_msgs} telemetry messages, once in order
+and once with ${e4_dups} duplicates, ${e4_bad} malformed messages and local reordering. Result: ${e4_same} of ${e4_ship} shipments ended in an
+identical final state, the event log was identical (${e4_ev_clean} vs. ${e4_ev_pert} events), and all ${e4_dlq} malformed messages were routed to
+the dead-letter queue without retries. The first version of this experiment exposed a real bug: the "ETA at halfway" value behind the
+ETA-accuracy KPI was taken from whichever message <i>arrived</i> first. It is now written by a separate conditional update in which the
+lowest sequence number wins, making it independent of arrival order.</p>
+
+<h3>4.4&nbsp;&nbsp;Throughput headroom</h3>
+<div class="two keep">
+<div>
+<p>Messages average ${msg_bytes}&nbsp;bytes (P95 ${msg_p95}). A Kinesis shard accepts 1&nbsp;MB/s or 1,000 records/s [8]; with these
+sizes the byte limit binds first. At the realistic 30&nbsp;s reporting interval one shard serves on the order of ten thousand trucks.
+Messages currently repeat static shipment data (parties, documents) in every ping; sending it once per shipment would cut
+message size by more than half.</p>
+</div>
+<div>
+<table>
+  <tr><th class="num">Report interval</th><th class="num">Trucks per shard</th><th class="num">Msgs/day per 1,000 trucks</th></tr>
+  ${thr_rows}
+</table>
+<div class="cap"><b>Table 4.</b> Shard capacity from measured message sizes.</div>
+</div>
+</div>
+
+<h3>4.5&nbsp;&nbsp;What was not measured</h3>
+<p>End-to-end latency (G1) is argued from the design — sub-second ingestion plus a 2&nbsp;s poll — but was not measured on a deployed
+stack under load; the dashboard records per-message ingest latency (device timestamp → database), which a deployment would report.
+Cost (G4) follows AWS's pay-per-use model; the only fixed charge is the Kinesis shard.</p>
+
+<h2>5&nbsp;&nbsp;Limitations and future work</h2>
+<ul>
+  <li><b>Synthetic data.</b> The simulator is plausible, not validated: parameters were chosen to give credible aggregates, not fitted
+  to real fleets. Because the ETA predictor encodes the same rules, Section&nbsp;4.1 overstates real-world accuracy. The natural next step
+  is learning ETA corrections (e.g. gradient-boosted residuals on lane, time of day and driver hours) from historical telemetry.</li>
+  <li><b>Tenancy.</b> The customer portal filters by customer ID; production use requires authentication (e.g. Cognito) that binds the
+  customer ID to the caller's token, and unguessable tracking tokens.</li>
+  <li><b>Scale.</b> <code>/metrics</code> scans the state table, which is adequate for thousands of shipments; larger deployments need
+  a secondary index and pre-aggregated daily metrics.</li>
+  <li><b>Push updates</b> via WebSockets, and a deployment-based latency and cost study, remain future work.</li>
+</ul>
+
+<h2>6&nbsp;&nbsp;Conclusion</h2>
+<p>Tracelane shows that a small, fully serverless stack can deliver live freight visibility with correct semantics under
+at-least-once delivery, and that the most valuable "intelligence" for arrival prediction in road freight is not a better speed
+estimate but knowledge of the operational rules — breaks, rests and borders — that dominate long-haul timing. Building the
+simulator to evaluate this also turned out to be the most effective way to find correctness bugs in the pipeline.</p>
+
+<h2>References</h2>
+<ol class="refs">
+  <li>Regulation (EC) No 561/2006 of the European Parliament and of the Council of 15 March 2006 on the harmonisation of certain social legislation relating to road transport. <i>Official Journal of the European Union</i>, L 102, 2006.</li>
+  <li>Smart Freight Centre. <i>Global Logistics Emissions Council Framework for Logistics Emissions Accounting and Reporting</i>, version 3.0, 2023.</li>
+  <li>ISO 14083:2023. <i>Greenhouse gases — Quantification and reporting of greenhouse gas emissions arising from transport chain operations.</i></li>
+  <li>D. Luxen and C. Vetter. Real-time routing with OpenStreetMap data. In <i>Proc. 19th ACM SIGSPATIAL International Conference on Advances in Geographic Information Systems</i>, 2011.</li>
+  <li>OpenStreetMap contributors. OpenStreetMap, https://www.openstreetmap.org (data under ODbL).</li>
+  <li>Natural Earth. Admin 0 — Countries, 1:50m, https://www.naturalearthdata.com.</li>
+  <li>Amazon Web Services. <i>AWS Well-Architected Framework</i>, https://docs.aws.amazon.com/wellarchitected/.</li>
+  <li>Amazon Web Services. <i>Amazon Kinesis Data Streams Developer Guide</i> — quotas and limits.</li>
+</ol>
+
+</body>
+</html>

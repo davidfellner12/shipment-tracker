@@ -178,17 +178,17 @@ export class Fleet {
     return total;
   }
 
+  // Mirrors the decision order of drive() exactly (see simulator/engine.py _hos_wait)
   hosWait(driveMin, since, today) {
     const h = params.hos;
     let wait = 0;
-    while (driveMin > 0) {
-      // the daily limit may be extended to finish the trip
-      if (driveMin <= Math.min(h.maxContinuousDrivingMin - since, h.extendedDailyDrivingMin - today)) break;
-      const can = Math.min(h.maxContinuousDrivingMin - since, h.maxDailyDrivingMin - today);
-      driveMin -= Math.max(can, 0);
-      today += Math.max(can, 0);
-      if (today >= h.maxDailyDrivingMin) { wait += h.dailyRestMin; since = 0; today = 0; }
-      else { wait += h.breakMin; since = 0; }
+    while (driveMin > 1e-9) {
+      const extend = driveMin <= h.extendedDailyDrivingMin - today;
+      if (today >= h.maxDailyDrivingMin && !extend) { wait += h.dailyRestMin; since = 0; today = 0; continue; }
+      if (since >= h.maxContinuousDrivingMin) { wait += h.breakMin; since = 0; continue; }
+      let step = Math.min(driveMin, h.maxContinuousDrivingMin - since);
+      if (today < h.maxDailyDrivingMin) step = Math.min(step, h.maxDailyDrivingMin - today);
+      driveMin -= step; since += step; today += step;
     }
     return wait;
   }

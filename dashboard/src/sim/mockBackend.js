@@ -46,15 +46,19 @@ class MockBackend {
         list.push(...events);
         this.events.set(msg.shipmentId, list);
       }
-      const prev = this.items.get(msg.shipmentId);
-      if (prev && prev.seq >= msg.seq) continue;                       // idempotent, like the Lambda
-      const item = { ...prev, ...state, lastSeenAt: nowIso, ingestLatencyMs: 40 + Math.round(Math.random() * 60) };
-      if (msg.progress >= 0.5 && msg.status !== 'DELIVERED' && !item.etaAtHalfway) item.etaAtHalfway = msg.etaAt;
-      this.items.set(msg.shipmentId, item);
+      let prev = this.items.get(msg.shipmentId);
+      // ETA at halfway: lowest sequence number in the window wins (order-independent, like the Lambda)
+      if (msg.progress >= 0.5 && msg.progress < 0.65 && msg.status !== 'DELIVERED'
+          && (prev?.halfwaySeq == null || msg.seq < prev.halfwaySeq)) {
+        prev = { ...prev, etaAtHalfway: msg.etaAt, halfwaySeq: msg.seq };
+        this.items.set(msg.shipmentId, prev);
+      }
+      if (prev?.seq != null && prev.seq >= msg.seq) continue;          // idempotent, like the Lambda
+      this.items.set(msg.shipmentId, { ...prev, ...state, lastSeenAt: nowIso });   // no ingest latency: nothing is transmitted in demo mode
     }
   }
 
-  all() { return [...this.items.values()]; }
+  all() { return [...this.items.values()].filter((i) => i.seq != null); }
 
   listShipments({ customerId, scope, days = 30 } = {}) {
     let items = this.all();
@@ -74,7 +78,7 @@ class MockBackend {
 
   getShipment(id) {
     const item = this.items.get(id);
-    if (!item) return null;
+    if (!item || item.seq == null) return null;
     return { shipment: shipmentView(item, Date.now() / 1000), events: [...(this.events.get(id) || [])] };
   }
 
