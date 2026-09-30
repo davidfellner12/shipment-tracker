@@ -1,308 +1,169 @@
 """
-Real-Time Shipment Tracker — GPS Simulator
-TU Wien × AWS 2026 — David Fellner
+Fleet telematics simulator — publishes truck telemetry to AWS IoT Core.
 
-Simulates 10 GPS-equipped trucks sending location events to AWS IoT Core.
-Each truck follows a realistic route between European logistics hubs.
+40 trucks run real European road lanes (see engine.py for the operational model).
+By default the simulation runs in real time and each truck reports every 30 s, like a
+real telematics unit. For a lively demo, fast-forward: --speed 30 --interval 3.
+State is saved to simulator/.state.json, so a restart resumes the same trucks and shipments.
 
-ETA calculation: remaining_distance / current_speed × 60
-  - remaining_distance = route_total_km × (1 - progress)
-  - Simple distance/speed division; not route-aware (no traffic data).
-  - Production alternative: AWS Location Service route calculator.
+On first start the fleet's recent history (--backfill-days) is simulated and
+published in fast-forward, so the dashboard's metrics have real data at once.
 
-MQTT QoS AT_LEAST_ONCE may deliver duplicates. The Lambda consumer handles
-this with an idempotent conditional DynamoDB write (timestamp comparison).
+  python simulator.py                  # real time, report every 30 s
+  python simulator.py --speed 30 --interval 3   # fast-forward demo
+  python simulator.py --dry-run        # no AWS: print telemetry to the console
+  python simulator.py --reset          # forget saved state, new fleet + history
+
+MQTT QoS AT_LEAST_ONCE may deliver duplicates; each message carries a
+per-shipment sequence number and the backend ignores anything not newer.
 """
 
+import sys
 import json
 import time
-import random
+import uuid
 import argparse
 from datetime import datetime, timezone
-from config import IOT_ENDPOINT, IOT_PORT, CERT_PATH, KEY_PATH, CA_PATH, CLIENT_ID_PREFIX
+from pathlib import Path
 
-from awsiot import mqtt_connection_builder
-from awscrt import mqtt
+from engine import Fleet
 
-# ---------------------------------------------------------------------------
-# Route definitions — 10 European logistics routes
-# Each route includes actual road-distance estimate (distanceKm) for ETA.
-# ---------------------------------------------------------------------------
-ROUTES = {
-    "SHIP-001": {
-        "label":      "Vienna → Hamburg",
-        "cargo":      "Electronics",
-        "distanceKm": 972,
-        "waypoints": [
-            (48.2082, 16.3738, "Vienna"),
-            (48.5,    14.5,    "Linz"),
-            (48.8,    13.0,    "Passau"),
-            (48.9,    11.5,    "Regensburg"),
-            (49.5,    10.0,    "Nuremberg"),
-            (50.1,     8.7,    "Frankfurt"),
-            (51.5,     7.5,    "Dortmund"),
-            (53.5503,  9.9937, "Hamburg"),
-        ],
-    },
-    "SHIP-002": {
-        "label":      "Graz → Paris",
-        "cargo":      "Auto Parts",
-        "distanceKm": 1240,
-        "waypoints": [
-            (47.0707, 15.4395, "Graz"),
-            (47.8,    13.0,    "Salzburg"),
-            (48.1351, 11.5820, "Munich"),
-            (48.7,     9.2,    "Stuttgart"),
-            (48.6,     7.7,    "Strasbourg"),
-            (48.8566,  2.3522, "Paris"),
-        ],
-    },
-    "SHIP-003": {
-        "label":      "Vienna → Warsaw",
-        "cargo":      "Medical Supplies",
-        "distanceKm": 681,
-        "waypoints": [
-            (48.2082, 16.3738, "Vienna"),
-            (49.0,    17.5,    "Brno"),
-            (49.8,    18.3,    "Ostrava"),
-            (50.0,    19.9,    "Kraków"),
-            (52.2297, 21.0122, "Warsaw"),
-        ],
-    },
-    "SHIP-004": {
-        "label":      "Vienna → Zürich",
-        "cargo":      "Pharmaceuticals",
-        "distanceKm": 784,
-        "waypoints": [
-            (48.2082, 16.3738, "Vienna"),
-            (47.8,    13.0,    "Salzburg"),
-            (47.3,    11.4,    "Innsbruck"),
-            (47.3769,  8.5417, "Zürich"),
-        ],
-    },
-    "SHIP-005": {
-        "label":      "Vienna → Lyon",
-        "cargo":      "Food & Beverage",
-        "distanceKm": 1060,
-        "waypoints": [
-            (48.2082, 16.3738, "Vienna"),
-            (47.8,    13.0,    "Salzburg"),
-            (47.3,    11.4,    "Innsbruck"),
-            (45.4654,  9.1866, "Milan"),
-            (45.07,    7.69,   "Turin"),
-            (45.7640,  4.8357, "Lyon"),
-        ],
-    },
-    "SHIP-006": {
-        "label":      "Prague → Vienna",
-        "cargo":      "Auto Components",
-        "distanceKm": 312,
-        "waypoints": [
-            (50.0755, 14.4378, "Prague"),
-            (49.2,    16.6,    "Brno"),
-            (48.2082, 16.3738, "Vienna"),
-        ],
-    },
-    "SHIP-007": {
-        "label":      "Maranello → Vienna",
-        "cargo":      "Luxury Vehicles",
-        "distanceKm": 820,
-        "waypoints": [
-            (44.5249, 10.8632, "Maranello"),
-            (44.5,    11.3,    "Bologna"),
-            (45.4,    10.9,    "Verona"),
-            (47.0,    11.3,    "Innsbruck"),
-            (48.2082, 16.3738, "Vienna"),
-        ],
-    },
-    "SHIP-008": {
-        "label":      "Salzburg → Prague",
-        "cargo":      "Beverages",
-        "distanceKm": 385,
-        "waypoints": [
-            (47.8095, 13.0550, "Salzburg"),
-            (48.3,    14.3,    "Linz"),
-            (48.6,    13.5,    "Passau"),
-            (50.0755, 14.4378, "Prague"),
-        ],
-    },
-    "SHIP-009": {
-        "label":      "Budapest → Vienna",
-        "cargo":      "Chemical Raw Materials",
-        "distanceKm": 244,
-        "waypoints": [
-            (47.4979, 19.0402, "Budapest"),
-            (47.7,    17.6,    "Győr"),
-            (48.2082, 16.3738, "Vienna"),
-        ],
-    },
-    "SHIP-010": {
-        "label":      "Bucharest → Vienna",
-        "cargo":      "Automotive Parts",
-        "distanceKm": 1380,
-        "waypoints": [
-            (44.4268, 26.1025, "Bucharest"),
-            (44.8,    24.9,    "Pitești"),
-            (45.8,    24.15,   "Sibiu"),
-            (46.77,   23.59,   "Cluj-Napoca"),
-            (47.1,    22.0,    "Oradea"),
-            (47.4979, 19.0402, "Budapest"),
-            (48.2082, 16.3738, "Vienna"),
-        ],
-    },
-}
+HERE       = Path(__file__).resolve().parent
+STATE_FILE = HERE / ".state.json"
+TOPIC      = "shipments/{shipment_id}/location"
+
+STATUS_ICON = {"LOADING": "📦", "IN_TRANSIT": "🚚", "BREAK": "☕", "REST": "🛏", "BORDER_HOLD": "🛃",
+               "UNLOADING": "📦", "DELIVERED": "✅"}
 
 
-def interpolate_position(waypoints: list, progress: float) -> tuple[float, float, str]:
-    """Return (lat, lon, nearest_city) for a progress value in [0, 1]."""
-    if progress >= 1.0:
-        wp = waypoints[-1]
-        return wp[0], wp[1], wp[2]
-    if progress <= 0.0:
-        wp = waypoints[0]
-        return wp[0], wp[1], wp[2]
+class Publisher:
+    """Thin wrapper over the AWS IoT MQTT connection (or stdout in dry-run)."""
 
-    segment_size = 1.0 / (len(waypoints) - 1)
-    segment_idx  = min(int(progress / segment_size), len(waypoints) - 2)
-    local_t      = (progress - segment_idx * segment_size) / segment_size
-
-    a = waypoints[segment_idx]
-    b = waypoints[segment_idx + 1]
-    lat  = a[0] + (b[0] - a[0]) * local_t
-    lon  = a[1] + (b[1] - a[1]) * local_t
-    city = a[2] if local_t < 0.5 else b[2]
-    return lat, lon, city
-
-
-def add_gps_noise(lat: float, lon: float, noise_m: float = 50) -> tuple[float, float]:
-    """Add realistic GPS noise (default ±50 m)."""
-    noise_deg = noise_m / 111_000
-    return (
-        lat + random.gauss(0, noise_deg),
-        lon + random.gauss(0, noise_deg),
-    )
-
-
-def compute_eta_minutes(progress: float, speed_kmh: float, total_km: float) -> int:
-    """ETA = remaining_km / speed × 60 (simple distance/speed division)."""
-    remaining_km = max(0.0, total_km * (1.0 - progress))
-    if speed_kmh <= 0:
-        return 9999
-    return int((remaining_km / speed_kmh) * 60)
-
-
-class ShipmentSimulator:
-    def __init__(self, delayed_ids: list[str] = None):
-        self.delayed_ids = set(delayed_ids or [])
-        self.progress: dict[str, float] = {sid: 0.0 for sid in ROUTES}
+    def __init__(self, dry_run: bool):
+        self.dry_run = dry_run
         self.connection = None
 
     def connect(self):
-        print(f"Connecting to IoT Core: {IOT_ENDPOINT}")
+        if self.dry_run:
+            return
+        from config import IOT_ENDPOINT, IOT_PORT, CERT_PATH, KEY_PATH, CA_PATH, CLIENT_ID_PREFIX
+        from awsiot import mqtt_connection_builder
+
+        if not IOT_ENDPOINT:
+            sys.exit("IOT_ENDPOINT is not set. Run `python scripts/provision_device.py` after deploying "
+                     "(or use --dry-run).")
+        for path in (CERT_PATH, KEY_PATH, CA_PATH):
+            if not Path(path).exists():
+                sys.exit(f"Missing {path}. Run `python scripts/provision_device.py` first.")
+
+        print(f"Connecting to AWS IoT Core: {IOT_ENDPOINT}")
         self.connection = mqtt_connection_builder.mtls_from_path(
-            endpoint=IOT_ENDPOINT,
-            port=IOT_PORT,
-            cert_filepath=CERT_PATH,
-            pri_key_filepath=KEY_PATH,
-            ca_filepath=CA_PATH,
-            client_id=f"{CLIENT_ID_PREFIX}-simulator",
-            clean_session=False,
-            keep_alive_secs=30,
+            endpoint=IOT_ENDPOINT, port=IOT_PORT,
+            cert_filepath=CERT_PATH, pri_key_filepath=KEY_PATH, ca_filepath=CA_PATH,
+            # Unique id: two simulators with the same id would kick each other off.
+            client_id=f"{CLIENT_ID_PREFIX}-{uuid.uuid4().hex[:8]}",
+            clean_session=True, keep_alive_secs=30,
+            on_connection_interrupted=lambda conn, error, **kw: print(f"⚠ Connection interrupted: {error}"),
+            on_connection_resumed=lambda conn, rc, session_present, **kw: print("✓ Connection resumed"),
         )
-        self.connection.connect().result()
-        print(f"Connected to AWS IoT Core  ({len(ROUTES)} shipments active)")
+        self.connection.connect().result(timeout=15)
+        print("Connected.")
+
+    def publish(self, msg: dict):
+        if self.dry_run:
+            return
+        from awscrt import mqtt
+        self.connection.publish(
+            topic=TOPIC.format(shipment_id=msg["shipmentId"]),
+            payload=json.dumps(msg, separators=(",", ":")),
+            qos=mqtt.QoS.AT_LEAST_ONCE,
+        )
 
     def disconnect(self):
         if self.connection:
             self.connection.disconnect().result()
-            print("Disconnected from AWS IoT Core")
 
-    def build_event(self, shipment_id: str) -> dict:
-        route    = ROUTES[shipment_id]
-        progress = self.progress[shipment_id]
 
-        lat, lon, near_city = interpolate_position(route["waypoints"], progress)
-        lat, lon = add_gps_noise(lat, lon)
+def save(fleet: Fleet):
+    STATE_FILE.write_text(json.dumps(fleet.state()), encoding="utf-8")
 
-        is_delayed = shipment_id in self.delayed_ids
-        if progress >= 1.0:
-            status = "DELIVERED"
-        elif is_delayed:
-            status = "DELAYED"
-        else:
-            status = "IN_TRANSIT"
 
-        speed_kmh = random.uniform(20, 40) if is_delayed else random.uniform(55, 95)
-        eta_min   = compute_eta_minutes(progress, speed_kmh, route["distanceKm"])
+def backfill(fleet: Fleet, pub: Publisher, days: float, rate: int):
+    """Simulate the last `days` (fleet must start `days` ago) in fast-forward, publishing milestones only."""
+    sent, total_min = 0, int(days * 1440)
+    print(f"Backfilling {days:g} days of fleet history…")
+    for done in range(0, total_min, 15):
+        fleet.advance(15)
+        for msg in fleet.messages(significant_only=True):
+            pub.publish(msg)
+            sent += 1
+            if not pub.dry_run and sent % rate == 0:
+                time.sleep(1)          # stay well below IoT Core per-connection limits
+        if done % (1440 * 2) == 0:
+            print(f"  day {done // 1440 + 1:>3}/{days:g} — {sent} messages")
+    print(f"Backfill done: {sent} messages.\n")
 
-        return {
-            "shipmentId":  shipment_id,
-            "timestamp":   datetime.now(timezone.utc).isoformat(),
-            "latitude":    round(lat, 6),
-            "longitude":   round(lon, 6),
-            "status":      status,
-            "nearestCity": near_city,
-            "cargo":       route["cargo"],
-            "routeLabel":  route["label"],
-            "speedKmh":    round(speed_kmh, 1),
-            "etaMinutes":  eta_min,
-            "progress":    round(progress, 3),
-            "isDelayed":   is_delayed,
-        }
 
-    def run(self, interval_sec: float = 3.0, step: float = 0.015):
-        print(f"\nSimulating {len(ROUTES)} shipments — publishing every {interval_sec}s")
-        print("Delayed:", sorted(self.delayed_ids) or "none")
-        print("Press Ctrl+C to stop\n")
+def print_cycle(fleet: Fleet, msgs: list[dict]):
+    sim = datetime.fromtimestamp(fleet.now, timezone.utc).strftime("%a %d %b %H:%M UTC")
+    print(f"── sim time {sim} ── {len(msgs)} active " + "─" * 40)
+    for m in msgs:
+        late = (datetime.fromisoformat(m["etaAt"].replace("Z", "+00:00")) -
+                datetime.fromisoformat(m["plannedDeliveryAt"].replace("Z", "+00:00"))).total_seconds() / 60
+        flag = f"⚠ +{late:.0f}m" if late > 0 else "on time"
+        events = ", ".join(e["type"] for e in m["events"])
+        print(f"{STATUS_ICON.get(m['status'], '•')} {m['shipmentId']} {m['routeLabel'][:24]:<24} "
+              f"{m['status']:<11} {m['progress'] * 100:5.1f}%  {m['speedKmh']:5.1f} km/h  {m['country']}  "
+              f"{flag:<9} {events}")
 
-        topic_tmpl = "shipments/{shipment_id}/location"
 
-        try:
-            while True:
-                for shipment_id in ROUTES:
-                    event   = self.build_event(shipment_id)
-                    topic   = topic_tmpl.format(shipment_id=shipment_id)
+def main():
+    parser = argparse.ArgumentParser(description="Fleet telematics simulator")
+    parser.add_argument("--speed", type=float, default=1, help="Simulated seconds per real second (default 1 = real time)")
+    parser.add_argument("--interval", type=float, default=30.0, help="Real seconds between publish cycles (default 30)")
+    parser.add_argument("--backfill-days", type=float, default=30, help="History to generate on first start")
+    parser.add_argument("--rate", type=int, default=80, help="Max messages/s during backfill")
+    parser.add_argument("--reset", action="store_true", help="Discard saved state and start a new fleet")
+    parser.add_argument("--dry-run", action="store_true", help="Print telemetry instead of publishing")
+    parser.add_argument("--cycles", type=int, default=None, help="Stop after N cycles (smoke test)")
+    parser.add_argument("--seed", type=int, default=None)
+    args = parser.parse_args()
 
-                    self.connection.publish(
-                        topic=topic,
-                        payload=json.dumps(event),
-                        qos=mqtt.QoS.AT_LEAST_ONCE,
-                    )
+    pub = Publisher(args.dry_run)
+    pub.connect()
 
-                    icon = "🔴" if event["isDelayed"] else ("✅" if event["status"] == "DELIVERED" else "🟢")
-                    print(
-                        f"{icon} {shipment_id} | {event['nearestCity']:<22} | "
-                        f"{event['speedKmh']:>5.1f} km/h | ETA: {event['etaMinutes']:>4}min | {event['status']}"
-                    )
+    if STATE_FILE.exists() and not args.reset and not args.dry_run:
+        fleet = Fleet.from_state(json.loads(STATE_FILE.read_text(encoding="utf-8")), seed=args.seed)
+        print(f"Resumed fleet from {STATE_FILE.name}")
+    else:
+        start = datetime.now(timezone.utc).timestamp() - max(args.backfill_days, 0) * 86_400
+        fleet = Fleet(seed=args.seed, start=start)
+        if args.backfill_days > 0:
+            backfill(fleet, pub, args.backfill_days, args.rate)
 
-                    if self.progress[shipment_id] < 1.0:
-                        inc = step * random.uniform(0.8, 1.2)
-                        if event["isDelayed"]:
-                            inc *= 0.3
-                        self.progress[shipment_id] = min(1.0, self.progress[shipment_id] + inc)
-
-                print("─" * 88)
-                time.sleep(interval_sec)
-
-        except KeyboardInterrupt:
-            print("\nSimulator stopped.")
+    step_min = args.interval * args.speed / 60
+    print(f"Live: {len(fleet.vehicles)} trucks, {args.speed:g}× speed "
+          f"({step_min:.1f} sim-min every {args.interval:g}s). Ctrl+C to stop.\n")
+    cycle = 0
+    try:
+        while args.cycles is None or cycle < args.cycles:
+            cycle += 1
+            started = time.time()
+            fleet.advance(step_min)
+            msgs = fleet.messages()
+            for msg in msgs:
+                pub.publish(msg)
+            print_cycle(fleet, msgs)
+            if not args.dry_run:
+                save(fleet)
+            time.sleep(max(0.0, args.interval - (time.time() - started)))
+    except KeyboardInterrupt:
+        print("\nSimulator stopped.")
+    finally:
+        if not args.dry_run:
+            save(fleet)
+        pub.disconnect()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Shipment GPS Simulator — 10 European routes")
-    parser.add_argument(
-        "--delay",
-        nargs="*",
-        default=[],
-        metavar="SHIP_ID",
-        help="Shipment IDs to mark as delayed (e.g. --delay SHIP-002 SHIP-008)",
-    )
-    parser.add_argument("--interval", type=float, default=3.0, help="Seconds between publish cycles")
-    args = parser.parse_args()
-
-    sim = ShipmentSimulator(delayed_ids=args.delay)
-    sim.connect()
-    try:
-        sim.run(interval_sec=args.interval)
-    finally:
-        sim.disconnect()
+    main()

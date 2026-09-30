@@ -1,0 +1,347 @@
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  ArrowRight, Radar, Clock4, BellRing, Users, Leaf, PlugZap, Check, Search, Radio, Waves, Database, ChevronDown,
+  ShieldCheck, Globe2, Zap, Thermometer, AlertTriangle, Truck, Building2,
+} from 'lucide-react';
+import { api } from '../lib/api';
+import { usePoll, useSession } from '../lib/session';
+import { BRAND, CUSTOMERS, num, pct } from '../lib/format';
+import FleetMap from '../components/FleetMap';
+import { Logo, ThemeToggle } from '../components/AppShell';
+import { cx } from '../components/ui';
+
+const FAQ = [
+  ['Which telematics hardware do I need?', 'Any unit that can publish MQTT or HTTPS — most modern truck telematics boxes and trailer trackers can. Devices authenticate with their own X.509 certificate.'],
+  ['How accurate are the ETAs?', 'ETAs account for remaining distance per country speed limits, EU driving-time rules (breaks and daily rests) and customs at non-EU borders. In the demo fleet, the ETA predicted at the halfway point is within 30 minutes for most deliveries — see the live number above.'],
+  ['Can my customers see only their own shipments?', 'Yes. Each shipper gets a separate workspace with their shipments, reports and tracking links. Internal data such as driver names and trip costs is never shown to them.'],
+  ['Where is the data stored?', 'In AWS eu-central-1 (Frankfurt), encrypted at rest and in transit. Delivered shipments are kept for 90 days by default.'],
+  ['How are CO₂e emissions calculated?', 'Per shipment from actual fuel or energy use and well-to-wheel emission factors aligned with the GLEC Framework, reported as total kg and g per tonne-km.'],
+];
+
+function Section({ id, eyebrow, title, subtitle, children, className }) {
+  return (
+    <section id={id} className={cx('mx-auto max-w-6xl px-4 py-24 sm:px-6', className)}>
+      <div className="mx-auto max-w-2xl text-center">
+        {eyebrow && <div className="text-sm font-semibold text-accent">{eyebrow}</div>}
+        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{title}</h2>
+        {subtitle && <p className="mt-4 text-lg text-ink-2">{subtitle}</p>}
+      </div>
+      <div className="mt-14">{children}</div>
+    </section>
+  );
+}
+
+function BrowserFrame({ children }) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface/70 p-2 shadow-2xl shadow-accent/10 backdrop-blur">
+      <div className="flex items-center gap-1.5 px-2 pb-2 pt-1">
+        <span className="size-2.5 rounded-full bg-[#ff5f57]" /><span className="size-2.5 rounded-full bg-[#febc2e]" /><span className="size-2.5 rounded-full bg-[#28c840]" />
+        <div className="mx-auto flex h-6 w-72 items-center justify-center rounded-md bg-subtle text-[11px] text-ink-3">app.tracelane.example/control-tower</div>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-line">{children}</div>
+    </div>
+  );
+}
+
+export default function Landing() {
+  const navigate = useNavigate();
+  const { setWorkspace } = useSession();
+  const [tracking, setTracking] = useState('');
+  const live = usePoll(() => api.listShipments({}), [], 3000);
+  const metrics = usePoll(() => api.metrics({ days: 30 }), [], 20000);
+  const active = (live.data?.shipments || []).filter((s) => s.status !== 'DELIVERED');
+  const k = metrics.data?.kpis;
+  const sample = active.find((s) => s.status === 'IN_TRANSIT')?.shipmentId;
+  const late = active.find((s) => s.exceptions.includes('LATE_RISK')) || active[0];
+
+  const openDemo = (workspace) => { setWorkspace(workspace); navigate('/app'); };
+
+  return (
+    <div className="min-h-full bg-bg">
+      {/* ── Nav ── */}
+      <header className="sticky top-0 z-30 border-b border-line/60 bg-bg/75 backdrop-blur-lg">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <div className="flex items-center gap-10">
+            <Logo />
+            <nav className="hidden items-center gap-7 text-sm font-medium text-ink-2 md:flex">
+              <a href="#product" className="hover:text-ink">Product</a>
+              <a href="#how" className="hover:text-ink">How it works</a>
+              <a href="#faq" className="hover:text-ink">FAQ</a>
+            </nav>
+          </div>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <button onClick={() => openDemo('CUST-VIT')} className="btn-ghost hidden sm:inline-flex">Customer login</button>
+            <button onClick={() => openDemo('operator')} className="btn-primary">Open live demo</button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Hero ── */}
+      <section className="relative overflow-hidden">
+        <div className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_70%)]" />
+        <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-r from-accent/25 via-[#7c3aed]/20 to-brand-2/25 blur-3xl" />
+        <div className="relative mx-auto max-w-6xl px-4 pb-10 pt-20 text-center sm:px-6 lg:pt-28">
+          <a href="#product" className="inline-flex items-center gap-2 rounded-full border border-line bg-surface/80 px-3 py-1 text-xs font-medium text-ink-2 shadow-sm backdrop-blur hover:text-ink">
+            <span className="rounded-full bg-accent-soft px-2 py-0.5 text-accent-ink">New</span>
+            CO₂e reporting per shipment, GLEC-aligned <ArrowRight size={13} />
+          </a>
+          <h1 className="mx-auto mt-6 max-w-4xl text-5xl font-semibold leading-[1.05] tracking-tight text-ink sm:text-6xl lg:text-7xl">
+            Real-time visibility for <span className="text-gradient">every truck you move</span>
+          </h1>
+          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-ink-2 sm:text-xl">
+            {BRAND} turns telematics into live tracking, predictive ETAs and customer-ready reports —
+            so your dispatchers stop answering “where is my order?” calls.
+          </p>
+          <div className="mt-9 flex flex-wrap justify-center gap-3">
+            <button onClick={() => openDemo('operator')} className="btn-primary !h-12 !rounded-xl !px-6 !text-base">
+              Explore the live demo <ArrowRight size={17} />
+            </button>
+            <button onClick={() => openDemo('CUST-VIT')} className="btn-outline !h-12 !rounded-xl !px-6 !text-base">See the customer portal</button>
+          </div>
+          <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-ink-3">
+            {['No sign-up needed', 'Works with any MQTT telematics', 'EU data residency (Frankfurt)'].map((t) => (
+              <span key={t} className="inline-flex items-center gap-1.5"><Check size={15} className="text-accent" />{t}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* product shot */}
+        <div className="relative mx-auto max-w-6xl px-4 pb-20 sm:px-6">
+          <BrowserFrame>
+            <div className="relative h-[460px] bg-subtle">
+              <FleetMap shipments={active} interactive={false} className="absolute inset-0" />
+              <div className="absolute left-4 top-4 hidden w-64 space-y-2 sm:block">
+                {[
+                  ['On-time delivery', pct(k?.onTimeRate, 1), '30 days'],
+                  ['ETA accuracy', k?.etaMaeMin != null ? `±${k.etaMaeMin} min` : '—', 'predicted at halfway'],
+                  ['CO₂e intensity', k ? `${k.gCo2ePerTkm} g/tkm` : '—', 'well-to-wheel'],
+                ].map(([label, value, note]) => (
+                  <div key={label} className="rounded-xl border border-line bg-surface/95 px-4 py-3 text-left shadow-lg backdrop-blur">
+                    <div className="text-xs text-ink-3">{label}</div>
+                    <div className="mt-0.5 flex items-baseline justify-between"><span className="text-xl font-semibold tabular-nums text-ink">{value}</span><span className="text-[11px] text-ink-3">{note}</span></div>
+                  </div>
+                ))}
+              </div>
+              {late && (
+                <div className="absolute bottom-4 right-4 hidden w-72 rounded-xl border border-line bg-surface/95 p-4 text-left shadow-xl backdrop-blur md:block">
+                  <div className="flex items-center gap-2 text-xs font-medium text-[#8a6200] dark:text-warning"><AlertTriangle size={14} /> Exception detected</div>
+                  <div className="mt-1.5 font-mono text-sm font-semibold text-ink">{late.shipmentId}</div>
+                  <div className="text-xs text-ink-3">{late.routeLabel} · {late.customerName}</div>
+                  <div className="mt-2 text-xs text-ink-2">Customer notified automatically with the updated ETA.</div>
+                </div>
+              )}
+            </div>
+          </BrowserFrame>
+        </div>
+      </section>
+
+      {/* ── Demo accounts strip ── */}
+      <section className="border-y border-line bg-surface">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+          <p className="text-center text-sm text-ink-3">Shipper accounts in the live demo workspace</p>
+          <div className="mt-6 grid grid-cols-2 items-center gap-x-8 gap-y-5 sm:grid-cols-4">
+            {Object.entries(CUSTOMERS).map(([id, c]) => (
+              <button key={id} onClick={() => openDemo(id)} className="flex items-center justify-center gap-2 text-ink-3 transition-colors hover:text-ink">
+                <Building2 size={16} /><span className="truncate text-sm font-semibold tracking-tight">{c.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Stats ── */}
+      <section className="mx-auto max-w-6xl px-4 pt-20 sm:px-6">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line md:grid-cols-4">
+          {[
+            [`${active.length || 40}`, 'trucks on the road right now'],
+            [num(k?.delivered), 'deliveries in the last 30 days'],
+            [k ? `${num(k.distanceKm / 1000)}k km` : '—', 'on real European road routes'],
+            ['< 5 s', 'from GPS ping to dashboard'],
+          ].map(([v, l]) => (
+            <div key={l} className="bg-surface p-6">
+              <div className="text-3xl font-semibold tracking-tight text-ink">{v}</div>
+              <div className="mt-1 text-sm text-ink-3">{l}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Bento features ── */}
+      <Section id="product" eyebrow="Product" title="Everything your customers ask about, answered live"
+        subtitle="Built for road carriers moving high-value, time-critical and temperature-controlled freight across Europe.">
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="card overflow-hidden lg:col-span-2">
+            <div className="p-7">
+              <Radar className="text-accent" size={22} />
+              <h3 className="mt-4 text-lg font-semibold">Live control tower</h3>
+              <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-2">Every truck on one map within seconds of its GPS ping — speed, country, driver status and border crossings, with exceptions ranked by severity.</p>
+            </div>
+            <div className="relative h-56 border-t border-line">
+              <FleetMap shipments={active} interactive={false} showLanes className="absolute inset-0" />
+            </div>
+          </div>
+          <div className="card p-7">
+            <Clock4 className="text-accent" size={22} />
+            <h3 className="mt-4 text-lg font-semibold">ETAs you can promise</h3>
+            <p className="mt-2 text-sm leading-relaxed text-ink-2">Predictions account for EU driving-time rules, country speed limits and Swiss customs — not just distance ÷ speed.</p>
+            <div className="mt-6 rounded-xl border border-line bg-subtle/60 p-4">
+              <div className="text-xs text-ink-3">Predicted arrival</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{k?.etaWithin30Rate != null ? pct(k.etaWithin30Rate) : '—'}</div>
+              <div className="text-xs text-ink-3">of ETAs within 30 min of actual</div>
+            </div>
+          </div>
+          <div className="card p-7">
+            <BellRing className="text-accent" size={22} />
+            <h3 className="mt-4 text-lg font-semibold">Exceptions, not noise</h3>
+            <p className="mt-2 text-sm leading-relaxed text-ink-2">Late risk, temperature excursions, border holds and lost signals surface automatically.</p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {[[AlertTriangle, 'Late risk', 'bg-warning/15 text-[#8a6200] dark:text-warning'], [Thermometer, 'Temp excursion', 'bg-critical/10 text-critical'],
+                [ShieldCheck, 'Customs cleared', 'bg-good/10 text-[#087a08] dark:text-good']].map(([Icon, label, c]) => (
+                <span key={label} className={cx('inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium', c)}><Icon size={12} />{label}</span>
+              ))}
+            </div>
+          </div>
+          <div className="card p-7">
+            <Users className="text-accent" size={22} />
+            <h3 className="mt-4 text-lg font-semibold">A portal for every shipper</h3>
+            <p className="mt-2 text-sm leading-relaxed text-ink-2">Each customer gets their own workspace, SLA reports, CSV exports and shareable tracking links for consignees.</p>
+          </div>
+          <div className="card p-7">
+            <Leaf className="text-accent" size={22} />
+            <h3 className="mt-4 text-lg font-semibold">CO₂e per shipment</h3>
+            <p className="mt-2 text-sm leading-relaxed text-ink-2">Well-to-wheel emissions by shipment, lane and powertrain — ready for your customers’ Scope 3 reporting.</p>
+            <div className="mt-5 text-3xl font-semibold tabular-nums">{k ? k.gCo2ePerTkm : '—'} <span className="text-sm font-normal text-ink-3">g CO₂e / tkm</span></div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          {[[PlugZap, 'Open REST API', 'Shipments, milestones and KPIs for your TMS or ERP.'],
+            [ShieldCheck, 'Secure by design', 'Per-device certificates, least-privilege access, encryption everywhere.'],
+            [Zap, 'Serverless scale', 'From 10 to 10,000 trucks without capacity planning.']].map(([Icon, t, d]) => (
+            <div key={t} className="flex gap-4 rounded-xl p-2">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-ink"><Icon size={18} /></div>
+              <div><div className="font-semibold">{t}</div><div className="mt-1 text-sm text-ink-2">{d}</div></div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* ── How it works ── */}
+      <section id="how" className="relative overflow-hidden bg-navy text-white">
+        <div className="bg-grid pointer-events-none absolute inset-0 opacity-40 [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
+        <div className="relative mx-auto max-w-6xl px-4 py-24 sm:px-6">
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="text-sm font-semibold text-[#a5b4fc]">How it works</div>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">From GPS ping to customer update in seconds</h2>
+          </div>
+          <div className="mt-14 grid gap-6 md:grid-cols-3">
+            {[
+              [Radio, 'Trucks report', 'Telematics units publish position, speed, reefer temperature and driver hours over secure MQTT.'],
+              [Waves, 'Events are processed', 'Every message is validated, de-duplicated and enriched with ETA, exceptions and emissions.'],
+              [Database, 'Everyone sees it', 'Dispatchers, shippers and consignees get the same live picture — dashboard, portal, link or API.'],
+            ].map(([Icon, title, text], i) => (
+              <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.04] p-7">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-gradient-to-br from-accent to-brand-2"><Icon size={18} /></div>
+                  <span className="text-sm text-white/50">Step {i + 1}</span>
+                </div>
+                <h3 className="mt-5 text-lg font-semibold">{title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-white/70">{text}</p>
+              </div>
+            ))}
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); const id = (tracking || sample || '').trim().toUpperCase(); if (id) navigate(`/track/${id}`); }}
+            className="mx-auto mt-14 flex max-w-lg gap-2 rounded-xl border border-white/10 bg-white/[0.06] p-2">
+            <div className="relative flex-1">
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/50" />
+              <input value={tracking} onChange={(e) => setTracking(e.target.value)}
+                placeholder={sample ? `Try a live tracking number: ${sample}` : 'Tracking number'}
+                className="h-10 w-full rounded-lg bg-transparent pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/50" />
+            </div>
+            <button className="btn !h-10 bg-white text-navy hover:bg-white/90">Track <ArrowRight size={15} /></button>
+          </form>
+        </div>
+      </section>
+
+      {/* ── Audiences ── */}
+      <Section eyebrow="Who it’s for" title="One platform, two sides of the shipment">
+        <div className="grid gap-4 md:grid-cols-2">
+          {[
+            [Truck, 'For carriers', 'Run a control tower for your whole fleet and turn visibility into a paid service for your shippers.',
+              ['Exception-first dispatch view', 'Driver hours and fleet status', 'Lane profitability: energy + tolls per km'], 'operator', 'Open operator view'],
+            [Globe2, 'For shippers', 'Give your team and your customers a reliable answer to “when will it arrive?” — without phone calls.',
+              ['Own workspace with SLA reports', 'Shareable tracking links', 'CO₂e per shipment for Scope 3'], 'CUST-LUM', 'Open customer portal'],
+          ].map(([Icon, title, text, items, ws, cta]) => (
+            <div key={title} className="card p-8">
+              <Icon className="text-accent" size={24} />
+              <h3 className="mt-4 text-xl font-semibold">{title}</h3>
+              <p className="mt-2 text-ink-2">{text}</p>
+              <ul className="mt-6 space-y-2.5 text-sm text-ink-2">
+                {items.map((i) => <li key={i} className="flex gap-2"><Check size={16} className="mt-0.5 shrink-0 text-accent" />{i}</li>)}
+              </ul>
+              <button onClick={() => openDemo(ws)} className="btn-outline mt-8">{cta} <ArrowRight size={15} /></button>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* ── FAQ ── */}
+      <Section id="faq" eyebrow="FAQ" title="Questions, answered">
+        <div className="mx-auto max-w-3xl divide-y divide-line rounded-2xl border border-line bg-surface">
+          {FAQ.map(([q, a]) => (
+            <details key={q} className="group px-6 py-5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium text-ink">
+                {q}<ChevronDown size={18} className="shrink-0 text-ink-3 transition-transform group-open:rotate-180" />
+              </summary>
+              <p className="mt-3 text-sm leading-relaxed text-ink-2">{a}</p>
+            </details>
+          ))}
+        </div>
+      </Section>
+
+      {/* ── CTA ── */}
+      <section className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
+        <div className="relative overflow-hidden rounded-3xl bg-navy px-8 py-16 text-center text-white sm:px-16">
+          <div className="pointer-events-none absolute -bottom-32 left-1/2 h-72 w-[700px] -translate-x-1/2 rounded-full bg-gradient-to-r from-accent/60 via-[#7c3aed]/50 to-brand-2/50 blur-3xl" />
+          <h2 className="relative text-3xl font-semibold tracking-tight sm:text-4xl">Stop guessing where your freight is.</h2>
+          <p className="relative mx-auto mt-4 max-w-xl text-white/70">Explore the live demo with a fleet of 40 trucks on real European routes — no sign-up needed.</p>
+          <div className="relative mt-8 flex flex-wrap justify-center gap-3">
+            <button onClick={() => openDemo('operator')} className="btn !h-12 !rounded-xl bg-white !px-6 !text-base text-navy hover:bg-white/90">Explore the live demo <ArrowRight size={17} /></button>
+            <a href="#faq" className="btn !h-12 !rounded-xl border border-white/20 !px-6 !text-base text-white hover:bg-white/10">Read the FAQ</a>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ── */}
+      <footer className="border-t border-line bg-surface">
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
+          <div>
+            <Logo />
+            <p className="mt-4 max-w-xs text-sm text-ink-3">Real-time shipment visibility for European road freight.</p>
+          </div>
+          {[
+            ['Product', [['Live demo', '/app'], ['Customer portal', '/app'], ['Track a shipment', sample ? `/track/${sample}` : '/app']]],
+            ['Platform', [['How it works', '#how'], ['System status', '/app/system'], ['FAQ', '#faq']]],
+            ['Company', [['About', '#'], ['Contact', '#'], ['Privacy', '#'], ['Terms', '#']]],
+          ].map(([title, links]) => (
+            <div key={title}>
+              <div className="text-sm font-semibold text-ink">{title}</div>
+              <ul className="mt-4 space-y-2.5 text-sm text-ink-3">
+                {links.map(([label, href]) => (
+                  <li key={label}>{href.startsWith('/') ? <Link to={href} className="hover:text-ink">{label}</Link> : <a href={href} className="hover:text-ink">{label}</a>}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-line">
+          <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-3 px-4 py-6 text-xs text-ink-3 sm:px-6">
+            <span>© {new Date().getFullYear()} {BRAND}. Demo data is simulated; all companies and people are fictional.</span>
+            <span>Built on AWS serverless · TU Wien × AWS 2026</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}

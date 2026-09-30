@@ -1,102 +1,73 @@
-# Real-Time Shipment Tracker
-**TU Wien × AWS 2026 — David Fellner**
+# Tracelane — Real-Time Shipment Tracker
 
-A serverless AWS pipeline that ingests simulated GPS events, processes them in real time, and displays live shipment status on a web dashboard.
+Live tracking, predictive ETAs and customer reporting for European road freight, on AWS serverless.
+TU Wien × AWS 2026 · David Fellner
 
----
+## Start the app locally (no AWS needed)
 
-## Architecture
+Requires **Node.js 18+**.
 
-```
-[Python Simulator]
-       │  MQTT / IoT SDK
-       ▼
-[AWS IoT Core]
-       │  IoT Rule → Kinesis
-       ▼
-[Amazon Kinesis Data Streams]
-       │  Trigger
-       ▼
-[AWS Lambda – process_event]
-       │  PutItem / UpdateItem
-       ▼
-[Amazon DynamoDB – ShipmentsTable]
-       │  REST via API Gateway
-       ▼
-[AWS Lambda – get_shipments]
-       │
-       ▼
-[React Dashboard – AWS Amplify]
-```
-
----
-
-## Project Structure
-
-```
-shipment-tracker/
-├── simulator/          # Python GPS event simulator
-├── lambda/
-│   ├── process_event/  # Kinesis consumer Lambda
-│   └── get_shipments/  # API Gateway Lambda
-├── infrastructure/     # AWS CDK stack (Python)
-├── dashboard/          # React + Vite frontend
-└── README.md
-```
-
----
-
-## Quick Start
-
-### 1. Prerequisites
-- Node.js 18+
-- Python 3.11+
-- AWS CLI configured (`aws configure`)
-- AWS CDK CLI: `npm install -g aws-cdk`
-
-### 2. Deploy Infrastructure
-```bash
-cd infrastructure
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cdk bootstrap
-cdk deploy
-# Note the outputs: API_URL, IOT_ENDPOINT
-```
-
-### 3. Run the Simulator
-```bash
-cd simulator
-pip install -r requirements.txt
-# Edit config.py with your IoT endpoint from CDK output
-python simulator.py
-```
-
-### 4. Run the Dashboard (local dev)
 ```bash
 cd dashboard
 npm install
-# Edit .env with your API_URL from CDK output
 npm run dev
 ```
 
----
+Open **http://localhost:3000**. The dashboard runs a simulated fleet of 40 trucks on real European
+roads directly in your browser, in real time, with 30 days of history.
+For a faster-moving demo, open **http://localhost:3000/app?speed=30**.
 
-## Demo Script (10 min)
+## Run it on AWS
 
-1. **Start simulator** — show terminal with GPS events firing
-2. **Open dashboard** — shipments appear & positions update live
-3. **Trigger delay** — `python simulator.py --delay SHIP-002`
-4. **Show Cost Explorer** — full PoC < $5
-5. **Architecture walkthrough** — explain each CDK construct
+Requires the **AWS CLI** (`aws configure`, region `eu-central-1`), **Python 3.11+**, and **CDK** (`npm i -g aws-cdk`).
 
----
+```bash
+# 1. Build the dashboard
+cd dashboard && npm install && npm run build && cd ..
 
-## Environment Variables
+# 2. Deploy (≈10 min). Confirm the two emails from AWS afterwards.
+cd infrastructure
+pip install -r requirements.txt
+cdk bootstrap                                  # first time only
+cdk deploy -c alertEmail=you@example.com
+cd ..
 
-| Variable | Where | Description |
-|---|---|---|
-| `IOT_ENDPOINT` | simulator/config.py | From `cdk deploy` output |
-| `VITE_API_URL` | dashboard/.env | From `cdk deploy` output |
-| `SHIPMENTS_TABLE` | Lambda env (set by CDK) | DynamoDB table name |
-| `KINESIS_STREAM` | Lambda env (set by CDK) | Kinesis stream name |
+# 3. Create the simulator's device certificate
+pip install boto3
+python scripts/provision_device.py
+
+# 4. Start the fleet simulator (first start publishes 30 days of history)
+cd simulator
+pip install -r requirements.txt
+python simulator.py                          # real time, one report per truck every 30 s
+# python simulator.py --speed 30 --interval 3  # fast-forward for a live demo
+```
+
+Open the `DashboardUrl` printed by `cdk deploy`.
+
+**Flagging a shipment** from the dashboard needs the operator API key:
+`aws apigateway get-api-key --api-key <OperatorApiKeyId> --include-value --query value --output text`
+
+**Stop paying when done:**
+`python scripts/provision_device.py --revoke`, then `cd infrastructure && cdk destroy`.
+
+## Test
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests -q
+```
+
+## Project layout
+
+| Folder | Contents |
+|---|---|
+| `dashboard/` | React app (landing page, operator control tower, customer portal, public tracking) |
+| `simulator/` | Fleet simulation engine + MQTT publisher |
+| `lambda/` | `process_event` (ingest), `api` (read + metrics), `update_shipment` (flag) |
+| `infrastructure/` | AWS CDK stack |
+| `shared/` | Road network, fictional customers/fleet, simulation parameters |
+| `scripts/` | Device provisioning, network/catalog generators |
+| `docs/` | [AWS services explained](docs/AWS_SERVICES.md) |
+
+All companies, people and plates in the demo data are fictional.

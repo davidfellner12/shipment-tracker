@@ -1,96 +1,96 @@
-/* ── Design Tokens ──────────────────────────────────────────────────────── */
-:root {
-  --bg-base:        #090c10;
-  --bg-surface:     #0d1117;
-  --bg-panel:       #111820;
-  --bg-panel-hover: #16202c;
-  --bg-card:        #141d27;
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
-  --border:         #1e2d3d;
-  --border-bright:  #2a3f55;
+@custom-variant dark (&:where(.dark, .dark *));
 
-  --neon-cyan:      #00e5ff;
-  --neon-cyan-dim:  #00bcd480;
-  --neon-green:     #39ff14;
-  --neon-green-dim: #39ff1440;
-  --neon-amber:     #ffab00;
-  --neon-amber-dim: #ffab0040;
-  --neon-red:       #ff1744;
-  --neon-red-dim:   #ff174440;
+/* ── Design tokens ─────────────────────────────────────────────────────────
+   Cool slate neutrals + indigo brand with a cyan gradient accent.
+   Chart series keep the validated dataviz palette; status colours are
+   reserved for state and always paired with an icon + label. */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
 
-  --text-primary:   #e2eaf4;
-  --text-secondary: #7a9bb5;
-  --text-muted:     #3d5670;
-  --text-mono:      'Share Tech Mono', monospace;
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-subtle: #f1f5f9;
+  --color-line: #e2e8f0;
+  --color-ink: #0f172a;
+  --color-ink-2: #475569;
+  --color-ink-3: #94a3b8;
+  --color-accent: #4f46e5;
+  --color-accent-ink: #4338ca;
+  --color-accent-soft: #eef2ff;
+  --color-brand-2: #06b6d4;
+  --color-navy: #0b1120;
 
-  --font-display:   'Barlow Condensed', sans-serif;
-  --font-body:      'Barlow', sans-serif;
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
 
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 8px;
+  --color-series-1: #2a78d6;
+  --color-series-2: #eb6834;
+  --color-series-3: #1baf7a;
+  --color-series-4: #eda100;
 }
 
-/* ── Reset ──────────────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+@layer base {
+  .dark {
+    --color-bg: #0b1120;
+    --color-surface: #111827;
+    --color-subtle: #1e293b;
+    --color-line: #1f2a3c;
+    --color-ink: #f1f5f9;
+    --color-ink-2: #cbd5e1;
+    --color-ink-3: #7c8aa0;
+    --color-accent: #6366f1;
+    --color-accent-ink: #a5b4fc;
+    --color-accent-soft: #1e1b4b;
+    --color-series-1: #3987e5;
+    --color-series-2: #d95926;
+    --color-series-3: #199e70;
+    --color-series-4: #c98500;
+    color-scheme: dark;
+  }
 
-html, body {
-  height: 100%;
-  margin: 0;
-  background: var(--bg-base);
-  overflow: hidden;
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    font-feature-settings: "cv11", "ss01", "tnum";
+  }
+  ::selection { background: color-mix(in oklab, var(--color-accent) 30%, transparent); }
 }
 
-#root {
-  height: 100%;
-  background: var(--bg-base);
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  font-size: 14px;
-  -webkit-font-smoothing: antialiased;
-  display: flex;
-  flex-direction: column;
+/* Reusable component classes (Tailwind v4: declared as utilities so they can be composed) */
+@utility card { @apply rounded-xl border border-line bg-surface shadow-[0_1px_2px_rgba(15,23,42,0.04)]; }
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 h-9 text-sm font-medium
+         transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer;
+}
+@utility btn-primary { @apply btn bg-accent text-white shadow-sm shadow-accent/30 hover:bg-accent-ink dark:hover:bg-[#4f46e5]; }
+@utility btn-ghost { @apply btn text-ink-2 hover:bg-subtle hover:text-ink; }
+@utility btn-outline { @apply btn border border-line bg-surface text-ink hover:bg-subtle; }
+@utility input {
+  @apply h-9 rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-3
+         outline-none focus:border-accent focus:ring-2 focus:ring-accent/20;
+}
+@utility label { @apply text-xs font-medium text-ink-3; }
+@utility text-gradient {
+  background: linear-gradient(90deg, var(--color-accent) 0%, #7c3aed 45%, var(--color-brand-2) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-ink) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-ink) 6%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
 }
 
-/* ── Scrollbar ──────────────────────────────────────────────────────────── */
-::-webkit-scrollbar            { width: 4px; height: 4px; }
-::-webkit-scrollbar-track      { background: var(--bg-base); }
-::-webkit-scrollbar-thumb      { background: var(--border-bright); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover{ background: var(--neon-cyan-dim); }
-
-/* ── Leaflet dark overrides ─────────────────────────────────────────────── */
-.leaflet-container {
-  background: #090c10 !important;
-  font-family: var(--font-body) !important;
-}
-.leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(0.7) brightness(0.7); }
-.leaflet-control-attribution { display: none; }
-.leaflet-control-zoom a {
-  background: var(--bg-panel) !important;
-  color: var(--text-secondary) !important;
-  border-color: var(--border) !important;
-}
-.leaflet-control-zoom a:hover { background: var(--bg-panel-hover) !important; color: var(--neon-cyan) !important; }
-
-/* ── Animations ─────────────────────────────────────────────────────────── */
-@keyframes pulse-ring {
-  0%   { transform: scale(0.8); opacity: 1; }
-  100% { transform: scale(2.4); opacity: 0; }
-}
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.2; }
-}
-@keyframes scan-line {
-  0%   { top: 0%; }
-  100% { top: 100%; }
-}
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes neon-flicker {
-  0%, 95%, 100% { opacity: 1; }
-  96%            { opacity: 0.4; }
-  98%            { opacity: 0.8; }
-}
+/* MapLibre controls follow the theme */
+.maplibregl-ctrl-group { @apply !rounded-lg !border !border-line !bg-surface !shadow-none; }
+.dark .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
+.maplibregl-ctrl-attrib { @apply !bg-surface/80 !text-[10px] !text-ink-3; }
+.maplibregl-ctrl-attrib a { @apply !text-ink-3; }
+.maplibregl-popup-content { @apply !rounded-lg !border !border-line !bg-surface !p-3 !text-ink !shadow-lg; }
+.maplibregl-popup-tip { display: none; }

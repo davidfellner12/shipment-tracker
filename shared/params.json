@@ -1,0 +1,61 @@
+{
+  "_doc": "Simulation parameters shared by simulator/engine.py and dashboard/src/sim/engine.js. Rates are indicative approximations for a 40 t Euro VI truck, not tariff data.",
+
+  "truckSpeedLimitKmh": { "AT": 80, "DE": 80, "NL": 80, "BE": 90, "FR": 90, "CH": 80, "IT": 80, "CZ": 80, "SK": 90, "PL": 80, "HU": 70, "SI": 80, "LU": 90, "HR": 80 },
+  "tollEurPerKm":       { "AT": 0.46, "DE": 0.35, "NL": 0.15, "BE": 0.20, "FR": 0.20, "CH": 0.85, "IT": 0.18, "CZ": 0.22, "SK": 0.20, "PL": 0.13, "HU": 0.28, "SI": 0.30, "LU": 0.00, "HR": 0.20 },
+
+  "urbanKm": 15,
+  "urbanSpeedKmh": 45,
+  "planningTrafficFactor": 1.0,
+  "bookingSlackFactor": 0.5,
+
+  "hos": {
+    "_doc": "EU Regulation 561/2006 (simplified): 45 min break after 4.5 h driving, 11 h daily rest after 9 h driving; the day may be extended to 10 h to finish a trip.",
+    "maxContinuousDrivingMin": 270,
+    "breakMin": 45,
+    "maxDailyDrivingMin": 540,
+    "extendedDailyDrivingMin": 600,
+    "dailyRestMin": 660
+  },
+
+  "traffic": {
+    "rushHours": [[7, 9], [16, 19]],
+    "jamChancePerHourNearCity": 0.35,
+    "jamChancePerHourOpenRoad": 0.04,
+    "jamSpeedKmh": [8, 30],
+    "jamLengthKm": [3, 15],
+    "nearCityKm": 40
+  },
+
+  "borders": {
+    "_doc": "Schengen temporary internal controls (random spot checks) vs. full customs clearance at non-EU Switzerland.",
+    "customsCountries": ["CH"],
+    "customsHoldMin": [25, 110],
+    "spotCheckCountries": ["DE", "AT", "FR", "NL"],
+    "spotCheckChance": 0.18,
+    "spotCheckHoldMin": [10, 45]
+  },
+
+  "fuel": {
+    "_doc": "WTW emission factors approximated from the GLEC Framework; consumption scales with payload.",
+    "DIESEL":   { "unit": "L",   "baseper100km": 22.0, "perTonne": 0.40, "kgCo2ePerUnit": 3.17, "eurPerUnit": 1.62 },
+    "LNG":      { "unit": "kg",  "baseper100km": 19.5, "perTonne": 0.36, "kgCo2ePerUnit": 3.10, "eurPerUnit": 1.35 },
+    "HVO":      { "unit": "L",   "baseper100km": 23.0, "perTonne": 0.42, "kgCo2ePerUnit": 0.51, "eurPerUnit": 2.05 },
+    "ELECTRIC": { "unit": "kWh", "baseper100km": 95.0, "perTonne": 1.50, "kgCo2ePerUnit": 0.25, "eurPerUnit": 0.32, "maxLaneKm": 420 }
+  },
+
+  "reefer": {
+    "noiseC": 0.25,
+    "faultChancePerHour": 0.01,
+    "faultDurationMin": [20, 90],
+    "faultDriftCPerHour": 6
+  },
+
+  "operations": {
+    "loadingMin": [30, 75],
+    "unloadingMin": [25, 70],
+    "turnaroundMin": [30, 150],
+    "etaChangeEventMin": 30,
+    "onTimeToleranceMin": 0
+  }
+}

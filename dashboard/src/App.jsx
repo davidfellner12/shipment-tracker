@@ -1,27 +1,28 @@
-// src/App.jsx — page router
-import React, { useState } from 'react';
-import LandingPage      from './pages/LandingPage';
-import FleetPage        from './pages/FleetPage';
-import AnalyticsPage    from './pages/AnalyticsPage';
-import ArchitecturePage from './pages/ArchitecturePage';
-import { useShipments } from './hooks/useShipments';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import AppShell from './components/AppShell';
+import Landing from './pages/Landing';
+import Overview from './pages/Overview';
+import Shipments from './pages/Shipments';
+import ShipmentDetail from './pages/ShipmentDetail';
+import Analytics from './pages/Analytics';
+import Fleet from './pages/Fleet';
+import System from './pages/System';
+import Track from './pages/Track';
 
 export default function App() {
-  const [page, setPage] = useState('landing');
-  const { shipments, lastUpdated, latencyMs, error, loading, updateDelay } = useShipments();
-
-  const navigate = (target) => setPage(target);
-  const enterDashboard = () => setPage('fleet');
-
-  // Shared data props passed to every page that needs live data
-  const dataProps = { shipments, lastUpdated, latencyMs, error, loading, updateDelay, onNavigate: navigate };
-
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {page === 'landing'       && <LandingPage      onEnter={enterDashboard} />}
-      {page === 'fleet'         && <FleetPage        {...dataProps} />}
-      {page === 'analytics'     && <AnalyticsPage    {...dataProps} />}
-      {page === 'architecture'  && <ArchitecturePage {...dataProps} />}
-    </div>
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/track/:id" element={<Track />} />
+      <Route path="/app" element={<AppShell />}>
+        <Route index element={<Overview />} />
+        <Route path="shipments" element={<Shipments />} />
+        <Route path="shipments/:id" element={<ShipmentDetail />} />
+        <Route path="analytics" element={<Analytics />} />
+        <Route path="fleet" element={<Fleet />} />
+        <Route path="system" element={<System />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

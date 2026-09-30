@@ -1,92 +1,71 @@
-// src/lib/api.js
-import { ROUTES_DATA, mockLiveState, lerp } from './mockData.js';
+// Data access. Same calls and response shapes in both modes:
+//   live — the AWS REST API (URL from /config.json written by CDK, or VITE_API_URL)
+//   mock — the in-browser simulation (src/sim/mockBackend.js), no AWS needed
 
-const API_URL  = import.meta.env.VITE_API_URL || '';
-const USE_MOCK = !API_URL || API_URL.includes('YOUR_API_ID');
+let API_URL = '';
+let MOCK = true;
+let backend = null;
 
-function noise() { return (Math.random() - 0.5) * 0.009; }
-
-function buildMockShipment(id) {
-  const r    = ROUTES_DATA[id];
-  const prog = mockLiveState.progress[id];
-  const lat  = lerp(r.originLat, r.destLat, prog) + noise();
-  const lon  = lerp(r.originLon, r.destLon, prog) + noise();
-
-  const isDelayed = !!r.delayed;
-  let status = 'IN_TRANSIT';
-  if (prog >= 1)        status = 'DELIVERED';
-  else if (isDelayed)   status = 'DELAYED';
-  else if (prog > 0.88) status = 'ARRIVING_SOON';
-
-  const speed    = isDelayed ? 22 + Math.random() * 18 : 68 + Math.random() * 22;
-  const remKm    = r.distanceKm * (1 - prog);
-  const etaMin   = Math.round((remKm / speed) * 60);
-
-  const cityList = r.waypoints;
-  const cityIdx  = Math.min(cityList.length - 1, Math.floor(prog * cityList.length));
-
-  // Advance for next tick
-  if (prog < 1) {
-    const inc = (isDelayed ? 0.003 : 0.008) * (0.85 + Math.random() * 0.3);
-    mockLiveState.progress[id] = Math.min(1, prog + inc);
+export async function loadConfig() {
+  let url = '';
+  try {
+    const res = await fetch('/config.json', { cache: 'no-store' });
+    if (res.ok && res.headers.get('content-type')?.includes('json')) url = (await res.json()).apiUrl || '';
+  } catch { /* no runtime config */ }
+  url = url || import.meta.env.VITE_API_URL || '';
+  API_URL = url.replace(/\/+$/, '');
+  MOCK = !API_URL || API_URL.includes('YOUR_API_ID');
+  if (MOCK) {
+    const { mockBackend } = await import('../sim/mockBackend.js');
+    backend = mockBackend();
   }
-
-  return {
-    shipmentId:    id,
-    timestamp:     new Date().toISOString(),
-    latitude:      lat.toFixed(6),
-    longitude:     lon.toFixed(6),
-    status,
-    nearestCity:   cityList[cityIdx],
-    cargo:         r.cargo,
-    routeLabel:    r.label,
-    speedKmh:      speed.toFixed(1),
-    etaMinutes:    etaMin,
-    progress:      mockLiveState.progress[id].toFixed(3),
-    isDelayed,
-    priority:      r.priority,
-    distanceKm:    r.distanceKm,
-    cargoValue:    r.cargoValue,
-    weight:        r.weight,
-    origin:        r.origin,
-    destination:   r.destination,
-    driverId:      r.driverId,
-    coordId:       r.coordId,
-    customerId:    r.customerId,
-    vehicleId:     r.vehicleId,
-    delayReason:   r.delayReason || null,
-  };
 }
 
-export async function fetchShipments() {
-  if (USE_MOCK) {
-    await new Promise(r => setTimeout(r, 120 + Math.random() * 150));
-    return Object.keys(ROUTES_DATA).map(buildMockShipment);
-  }
-  const res = await fetch(`${API_URL}/shipments`);
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = await res.json();
-  return data.shipments || [];
-}
+export const isMock = () => MOCK;
 
-// PUT /shipments/{id} — toggle delay flag for live demo
-export async function updateShipmentDelay(id, isDelayed, reason = '') {
-  if (USE_MOCK) {
-    await new Promise(r => setTimeout(r, 80 + Math.random() * 60));
-    const route = ROUTES_DATA[id];
-    if (route) {
-      route.delayed     = isDelayed;
-      route.delayReason = isDelayed ? (reason || 'Manually flagged via dashboard') : undefined;
-    }
-    return { updated: id };
-  }
-  const res = await fetch(`${API_URL}/shipments/${id}`, {
-    method:  'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ isDelayed, delayReason: reason || undefined }),
-  });
+async function get(path, params = {}) {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));
+  const res = await fetch(`${API_URL}${path}${qs.size ? `?${qs}` : ''}`);
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
 
-export function isMockMode() { return USE_MOCK; }
+export const api = {
+  listShipments: (params = {}) => (MOCK ? backend.listShipments(params) : get('/shipments', params)),
+  getShipment:   (id) => (MOCK ? backend.getShipment(id) : get(`/shipments/${encodeURIComponent(id)}`)),
+  metrics:       (params = {}) => (MOCK ? backend.metrics(params) : get('/metrics', params)),
+  flag:          (id, isDelayed, reason) => (MOCK ? backend.setFlag(id, isDelayed, reason) : putFlag(id, isDelayed, reason)),
+};
+
+// Writes need the operator API key (API Gateway usage plan). It is never bundled
+// into the site: the operator pastes it once per browser session.
+const KEY_STORAGE = 'tracelane.apiKey';
+
+function apiKey(forcePrompt = false) {
+  let key = null;
+  try { key = sessionStorage.getItem(KEY_STORAGE); } catch { /* storage blocked */ }
+  if (!key || forcePrompt) {
+    key = window.prompt('Operator API key required to flag shipments:')?.trim() || null;
+    if (key) { try { sessionStorage.setItem(KEY_STORAGE, key); } catch { /* ignore */ } }
+  }
+  return key;
+}
+
+async function putFlag(id, isDelayed, reason) {
+  const send = (key) => fetch(`${API_URL}/shipments/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': key },
+    body: JSON.stringify(reason ? { isDelayed, delayReason: reason } : { isDelayed }),
+  });
+  let key = apiKey();
+  if (!key) throw new Error('Operator API key required');
+  let res = await send(key);
+  if (res.status === 403) {
+    key = apiKey(true);
+    if (!key) throw new Error('Operator API key required');
+    res = await send(key);
+  }
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}

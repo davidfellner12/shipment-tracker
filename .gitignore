@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# CDK
+infrastructure/cdk.out/
+infrastructure/cdk.context.json
+
+# Node / Vite
+node_modules/
+dashboard/dist/
+dashboard/.env
+dashboard/.env.local
+
+# Secrets — IoT device credentials and endpoint
+simulator/certs/
+simulator/.env
+
+# IDE
+.idea/workspace.xml
+.idea/shelf/
+
+# Simulator runtime state
+simulator/.state.json
