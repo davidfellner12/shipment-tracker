@@ -1,3 +1,5 @@
+// Routes: / landing page, /track/:id public tracking, /app/* the signed-in workspace
+// (operator control tower or a customer's view, see lib/session.jsx).
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppShell from './components/AppShell';
 import Landing from './pages/Landing';

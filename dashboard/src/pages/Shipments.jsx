@@ -1,3 +1,5 @@
+// /app/shipments — searchable shipment table: live board or 30-day delivery history,
+// with status/customer/exception filters and CSV export.
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Download, Search, Thermometer, PackageSearch } from 'lucide-react';

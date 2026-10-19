@@ -31,12 +31,15 @@ def num(value, default=0.0) -> float:
 
 
 def delay_minutes(item: dict) -> float | None:
+    """Minutes late (+) or early (−): actual delivery, or the current ETA while in transit."""
     planned = ts(item.get("plannedDeliveryAt"))
     actual  = ts(item.get("deliveredAt") or item.get("etaAt"))
     return None if planned is None or actual is None else round((actual - planned) / 60)
 
 
 def shipment_view(item: dict, real_now: float) -> dict:
+    """API view of one stored item: hides internal attributes, adds delay, the operator
+    flag, exception codes and a severity (critical / warning / ok) for the dashboard."""
     view = {k: v for k, v in item.items() if k not in INTERNAL}
     delivered = item.get("status") == "DELIVERED"
     delay = delay_minutes(item)
@@ -62,7 +65,9 @@ def shipment_view(item: dict, real_now: float) -> dict:
     if item.get("manualDelay") and not delivered:
         exceptions.append("FLAGGED")
     view["exceptions"] = exceptions
-    critical = bool({"TEMP_EXCURSION", "SIGNAL_LOST"} & set(exceptions)) or         ("LATE_RISK" in exceptions and (delay or 0) > 120)
+    # critical: cargo at risk, truck unreachable, or more than 2 h late
+    critical = (bool({"TEMP_EXCURSION", "SIGNAL_LOST"} & set(exceptions))
+                or ("LATE_RISK" in exceptions and (delay or 0) > 120))
     view["severity"] = "critical" if critical else "warning" if exceptions else "ok"
     return view
 
@@ -74,6 +79,8 @@ def clock(items: list[dict]) -> float:
 
 
 def compute_metrics(items: list[dict], days: int = 30, customer_id: str | None = None) -> dict:
+    """Response of GET /metrics: KPIs over shipments delivered in the last `days`, plus a
+    daily series and breakdowns by lane, customer, fuel type and delay cause."""
     now   = clock(items)
     since = now - days * 86_400
     if customer_id:
@@ -130,6 +137,7 @@ def compute_metrics(items: list[dict], days: int = 30, customer_id: str | None =
             })
         return sorted(rows, key=lambda r: -r["shipments"])
 
+    # Delay causes: minutes held at customs, at spot checks and in traffic
     causes = {k: {"cause": label, "minutes": 0, "shipments": 0} for k, label in CAUSE_LABELS.items()}
     for i in delivered:
         for k, minutes in ((i.get("totals") or {}).get("holdMin") or {}).items():
@@ -137,6 +145,7 @@ def compute_metrics(items: list[dict], days: int = 30, customer_id: str | None =
                 causes[k]["minutes"] += round(num(minutes))
                 causes[k]["shipments"] += 1
 
+    # ETA error histogram (|delivered − ETA at halfway|)
     buckets = [("≤ 15 min", 15), ("≤ 30 min", 30), ("≤ 1 h", 60), ("≤ 2 h", 120), ("> 2 h", float("inf"))]
     eta_hist, prev = [], -1.0
     for label, hi in buckets:

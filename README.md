@@ -30,7 +30,7 @@ cd dashboard && npm install && npm run dev      # http://localhost:3000  (add /a
 **Reproduce the results and the report (Python 3.11+):**
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest tests -q                        # Lambda, simulator and infrastructure tests
+python -m pytest tests -q                        # Lambda, simulator, infrastructure and parity tests
 python evaluation/run_experiments.py             # ≈ 5 min, writes evaluation/results/ and report/figures/
 cd report && npm install && cd .. && python report/build.py   # report.pdf (uses a local Edge/Chrome)
 ```
@@ -65,7 +65,7 @@ dashboard/            4. React web app on S3 + CloudFront
   src/sim/              JS port of the simulator for the mock mode
 shared/               road network (37 hubs, 156 lanes), fictional catalog, parameters, used by 1 and 4
 scripts/              provision_device.py (IoT certificate), reset_demo.py, build_*.py (shared data)
-tests/                Lambda, simulator and stack tests (pytest)
+tests/                Lambda, simulator, stack and demo-mode parity tests (pytest)
 presentation/         slides.html and speaker_script.html for the course presentation
 evaluation/, report/  experiments and the generated technical report
 docs/                 AWS services explained (AWS_SERVICES.md), screenshots

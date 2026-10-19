@@ -193,7 +193,7 @@
   <div class="subtitle">Presentation Script</div>
   <div class="meta">
     <span>David Fellner</span>
-    <span>≈ 21.5 min talk: 13 slides · 8 demo · then 5 min Q&amp;A</span>
+    <span>≈ 23 min talk: 12 slides · 8.5 min demo · 3 closing slides · then 5 min Q&amp;A</span>
   </div>
 </div>
 
@@ -226,7 +226,14 @@
 <h2>Slide 4–5 · Architecture &amp; service choices (3 min)</h2>
 <blockquote>
   "A simulator drives 40 trucks on 156 real European road lanes. Telemetry goes over MQTT to IoT Core, which authenticates with an X.509 certificate. An IoT rule writes every message into Kinesis, partitioned by shipment. A Lambda consumes the stream and writes the current state and the milestone history to DynamoDB. The dashboard is a static React app on S3 behind CloudFront and reads through API Gateway and a second Lambda.<br><br>
-  For each service I considered an alternative." <em>(Walk the table — one sentence per row.)</em>
+  For each service I considered an alternative.<br>
+  IoT Core instead of plain HTTPS to API Gateway: trucks keep one MQTT session open and each one has its own certificate, instead of a shared secret and one HTTP request per ping.<br>
+  Kinesis instead of SQS, for ordering and replay; I'll come back to that on the next slide.<br>
+  Lambda instead of EC2 or Fargate: the work comes in short bursts, so I don't want to pay for a server that is idle most of the time.<br>
+  DynamoDB instead of RDS: I only ever read by shipment ID, or by shipment ID plus time for the timeline. That's key-value access, with no idle cost and no connection pool to manage from Lambda.<br>
+  API Gateway instead of a Lambda function URL, because I need API keys, usage plans and throttling for the write endpoint.<br>
+  S3 and CloudFront instead of Amplify, which I had in the 1-pager: both work, but this way the website is in the same CDK stack and is deployed and destroyed with everything else.<br>
+  And an SQS dead-letter queue, because just logging errors would lose the message; in the DLQ I can inspect it and replay it."
 </blockquote>
 
 <h2>Slide 6 · Why Kinesis (1 min)</h2>
@@ -246,10 +253,14 @@
 </blockquote>
 
 <h2>Slides 9–12 · Pillars (4 min, graded: take your time here)</h2>
-<h3>Reliability (slides 9–10)</h3>
+<h3>Latency (slide 9)</h3>
 <blockquote>
-  "Latency: the backend stamps how long each message took from the truck to DynamoDB; the dashboard polls every 2 seconds. An alarm fires if the stream falls more than 30 seconds behind.<br>
-  I tested reliability like a chaos experiment: replay the same messages with 20 % duplicates, 2 % malformed and reordered. Hypothesis: same final state. Result: 302 of 302 shipments identical, all 58 bad messages in the DLQ. The experiment also found two real bugs, which I fixed.<br><br>
+  "The target was under 5 seconds from the truck to the screen. The Lambda stamps every message with how long it took from the truck to DynamoDB. On AWS that's 0.83 seconds at the median and 3.3 at p95. On top of that comes the dashboard poll, every 2 seconds, so a typical update is on screen in about 2 seconds. My first run was at 9 seconds: messages were waiting in the queue because of a 1-second batching window. Removing it brought the waiting time down to 0.3 seconds. An alarm emails me if the pipeline falls more than 30 seconds behind.<br>
+  Why polling and not WebSockets? Polling already meets the target, and WebSockets would add a connection table, two more Lambdas and a fan-out path."
+</blockquote>
+<h3>Reliability (slide 10)</h3>
+<blockquote>
+  "I tested reliability like a chaos experiment: replay the same messages with 20 % duplicates, 2 % malformed and reordered. Hypothesis: same final state. Result: 302 of 302 shipments identical, all 58 bad messages in the DLQ. The experiment also found two real bugs, which I fixed.<br><br>
   And on the live AWS run I got a real fault for free: AWS KMS returned a 500 on one DynamoDB write. The Lambda reported just that message as failed, SQS redelivered it, the lag alarm emailed me, and the dead-letter queue stayed empty. Nothing was lost."
 </blockquote>
 <h3>Security (slide 11)</h3>
@@ -364,6 +375,8 @@
 </div>
 
 <div class="qa">
+  <div class="question">How did you test it?</div>
+  <div class="answer">Four levels. 24 automated tests run in GitHub Actions on every push: the three Lambdas against mocked DynamoDB and SQS (moto), fed with telemetry from the real simulator; CDK assertion tests for the security properties (API key on PUT, encryption, least-privilege IoT policy); and a test that the in-browser demo mode computes exactly the same KPIs as the deployed API. Then the fault-injection experiment (302/302), and finally the live run on AWS with measured latency and cost.</div>
   <div class="question">What would you do differently?</div>
   <div class="answer">Measure on AWS earlier. Design the read path (GSI) together with the write path, not after. And move auth to Cognito from the start, because retrofitting tenancy is harder than building it in.</div>
 </div>
@@ -378,11 +391,11 @@
   <tbody>
     <tr><td>Opening, problem, scorecard</td><td>1–3</td><td>2.5 min</td></tr>
     <tr><td>Architecture &amp; choices</td><td>4–8</td><td>6 min</td></tr>
-    <tr><td>Pillars: Reliability, Security, Cost</td><td>9–13</td><td>4 min</td></tr>
-    <tr><td>Live demo</td><td>14</td><td>8 min</td></tr>
-    <tr><td>Trade-offs, summary</td><td>15–16</td><td>1 min</td></tr>
+    <tr><td>Pillars: Latency, Reliability, Security, Cost</td><td>9–12</td><td>4 min</td></tr>
+    <tr><td>Live demo</td><td>14</td><td>8.5 min</td></tr>
+    <tr><td>Scaling, trade-offs, summary</td><td>13, 15–16</td><td>2 min</td></tr>
     <tr><td>Q&amp;A</td><td></td><td>5 min</td></tr>
-    <tr class="total"><td>Total</td><td></td><td>≈ 21.5 min + 5 min Q&amp;A</td></tr>
+    <tr class="total"><td>Total</td><td></td><td>≈ 23 min + 5 min Q&amp;A</td></tr>
   </tbody>
 </table>
 

@@ -1,3 +1,5 @@
+// /app/fleet — operator only: every truck with its current job, driver hours left
+// (EU 561/2006) and last delivery. Joins the static catalog with the live shipment list.
 import { Link } from 'react-router-dom';
 import { Snowflake, Box, Download } from 'lucide-react';
 import { api } from '../lib/api';

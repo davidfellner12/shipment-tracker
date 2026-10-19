@@ -1,3 +1,5 @@
+// /app/analytics — KPIs from GET /metrics over 7/14/30 days: on-time rate, ETA accuracy,
+// CO2e, cost, and breakdowns by lane, customer and fuel type (CSV export).
 import { useState } from 'react';
 import { Download, CheckCircle2, Clock4, Leaf, Route, Euro, Thermometer } from 'lucide-react';
 import { api } from '../lib/api';

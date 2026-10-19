@@ -120,7 +120,8 @@ class ShipmentTrackerStack(Stack):
         #   • Back-pressure: Kinesis buffers bursts; Lambda consumes at its own pace
         # Trade-off: a provisioned shard costs ~$0.015/h (~$11/month) even idle —
         # this is the largest line item. Destroy the stack after the demo.
-        # Scaling: 1 shard = 1 MB/s or 1000 records/s in → ~3000 trucks at 1 msg/3 s.
+        # Scaling: 1 shard = 1 MB/s or 1000 records/s in. Messages are ~1.76 KB, so the
+        # byte limit binds first: ~570 msg/s → ~17,000 trucks at one message per 30 s.
         # Free-plan fallback (ingest=sqs): a standard SQS queue. No ordering, but
         # process_event is seq-guarded and order-independent, so the result is the same.
         stream = ingest_queue = None
@@ -223,7 +224,7 @@ class ShipmentTrackerStack(Stack):
                 tracing=lambda_.Tracing.ACTIVE,
             )
 
-        # process_event: Kinesis consumer
+        # process_event: consumes the ingest buffer (Kinesis stream or SQS queue)
         process_fn = make_fn("ProcessEventFn", "process_event", 256, 30, {"DLQ_URL": dlq.queue_url})
         shipments_table.grant(process_fn, "dynamodb:UpdateItem")
         events_table.grant(process_fn, "dynamodb:PutItem", "dynamodb:BatchWriteItem")

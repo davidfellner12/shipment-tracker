@@ -79,6 +79,7 @@ def record_body(record: dict) -> str:
 
 
 def parse_record(record: dict) -> dict:
+    """Decode and validate one record. Raises InvalidEvent for anything that can never succeed."""
     try:
         raw = record_body(record)
         msg = json.loads(raw, parse_float=Decimal)
@@ -126,6 +127,10 @@ def write_events(msg: dict, now: int) -> None:
 
 
 def upsert_state(msg: dict, now: int) -> None:
+    """Write the shipment's current state, but only if `seq` is newer than the stored one.
+
+    The condition makes the write idempotent and order-safe: a duplicate or late message
+    raises ConditionalCheckFailedException, which the handler counts as skipped."""
     item = {k: msg[k] for k in STATE_FIELDS if k in msg}
     item["lastSeenAt"] = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     item["ttl"] = now + (DELIVERED_TTL_S if msg["status"] == "DELIVERED" else ACTIVE_TTL_S)
@@ -172,6 +177,7 @@ def record_halfway_eta(msg: dict) -> None:
 
 
 def send_to_dlq(record: dict, reason: str) -> None:
+    """Park an invalid record in the DLQ with the rejection reason (for inspection/replay)."""
     if not DLQ_URL:
         logger.error("No DLQ configured; dropping invalid record: %s", reason)
         return
@@ -184,6 +190,7 @@ def send_to_dlq(record: dict, reason: str) -> None:
 
 
 def handler(event, context):
+    """Process a Kinesis or SQS batch; returns the records to retry (partial batch failure)."""
     records = event.get("Records", [])
     success = skipped = invalid = 0
     failures: list[dict] = []

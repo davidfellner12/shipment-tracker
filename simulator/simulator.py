@@ -128,6 +128,8 @@ def main():
     parser.add_argument("--cycles", type=int, default=None, help="Stop after N cycles (smoke test)")
     parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
+    # The status lines use emoji; a Windows console or a redirected log defaults to cp1252.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     pub = Publisher(args.dry_run)
     pub.connect()

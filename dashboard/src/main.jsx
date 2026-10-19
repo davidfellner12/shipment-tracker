@@ -1,3 +1,4 @@
+// Entry point: read the runtime config (live API or mock mode) before the first render.
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';

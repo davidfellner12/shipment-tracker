@@ -1,3 +1,5 @@
+// /app/system — how the platform runs: measured ingest latency (p50/p95 from
+// ingestLatencyMs, set by process_event), the AWS data flow, and the cost estimate.
 import { Cpu, Database, Radio, Waves, Globe, Cloud, ArrowRight, Gauge, Activity, Timer } from 'lucide-react';
 import { api, isMock, ingestMode } from '../lib/api';
 import { usePoll } from '../lib/session';

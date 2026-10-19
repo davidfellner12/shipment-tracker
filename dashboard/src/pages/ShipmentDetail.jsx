@@ -1,3 +1,5 @@
+// /app/shipments/:id — one shipment: route on the map, ETA vs. plan, cargo, documents,
+// milestone timeline. Operators can flag it (PUT with API key) and share a tracking link.
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Flag, Link2, Thermometer, Leaf, Truck, Package, Timer, MapPin, PackageSearch, FileText, ArrowRight, FileCheck2, TriangleAlert, Download, ExternalLink } from 'lucide-react';

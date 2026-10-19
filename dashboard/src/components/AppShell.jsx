@@ -1,3 +1,5 @@
+// Layout of the /app workspace: sidebar navigation, workspace switcher
+// (operator ↔ customer), theme toggle, and the demo/AWS connection badge.
 import { useState } from 'react';
 import { NavLink, Outlet, Link } from 'react-router-dom';
 import { LayoutDashboard, Package, BarChart3, Truck, Server, Moon, Sun, Menu, X, Building2 } from 'lucide-react';

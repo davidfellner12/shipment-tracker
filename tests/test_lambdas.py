@@ -179,3 +179,25 @@ def test_api_cors_and_404(aws, history):
     evil = api.handler(api_event("GET", origin="https://evil.example"), None)
     assert evil["headers"]["Access-Control-Allow-Origin"] != "https://evil.example"
     assert api.handler(api_event("GET", "MISSING"), None)["statusCode"] == 404
+
+
+def test_history_scope_lists_only_delivered_newest_first(aws, history):
+    process, api = load_handler("process_event"), load_handler("api")
+    ingest(history, process)
+    rows = body(api.handler(api_event("GET", params={"scope": "history", "days": "30"}), None))["shipments"]
+    assert rows and all(s["status"] == "DELIVERED" for s in rows)
+    assert [s["deliveredAt"] for s in rows] == sorted((s["deliveredAt"] for s in rows), reverse=True)
+    assert len(rows) == len({m["shipmentId"] for m in history if m["status"] == "DELIVERED"})
+
+
+def test_halfway_eta_does_not_depend_on_arrival_order(aws, history):
+    """The ETA-accuracy KPI uses the ETA from the first message past halfway, whatever order they arrive in."""
+    process = load_handler("process_event")
+    sid = next(m["shipmentId"] for m in history
+               if 0.5 <= m["progress"] < 0.65 and m["status"] != "DELIVERED")
+    own = [m for m in history if m["shipmentId"] == sid]
+    first = next(m for m in own if 0.5 <= m["progress"] < 0.65)
+    ingest(list(reversed(own)), process)
+    item = aws["table"].get_item(Key={"shipmentId": sid})["Item"]
+    assert item["halfwaySeq"] == first["seq"] and item["etaAtHalfway"] == first["etaAt"]
+    assert item["seq"] == own[-1]["seq"]                   # and the newest state still wins

@@ -133,6 +133,7 @@ class Fleet:
         return {"name": pool[index % len(pool)], "site": f"Receiving dock, {city}", "city": city}
 
     def _documents(self, lane: Lane, cargo: dict) -> list[str]:
+        """Transport documents the shipment carries (customs, ADR and reefer papers as needed)."""
         docs = ["CMR consignment note", "Commercial invoice", "Packing list"]
         if any(self._is_customs(a, b) for a, b in lane.crossings_after(0)):
             docs += ["Export declaration (EAD)", "Transit document T1"]
@@ -143,6 +144,11 @@ class Fleet:
         return docs
 
     def _start_shipment(self, v: dict) -> None:
+        """Book a new job for an idle truck and plan its delivery window.
+
+        The planned delivery uses the same driving-time model as eta(), plus a traffic
+        allowance and customer-specific slack, so lateness comes from events the plan
+        could not foresee (jams, spot checks, reefer faults), not from a naive plan."""
         lane, cid, cargo = self._pick_job(v)
         cust  = self.catalog["customers"][cid]
         temp  = cargo.get("tempC")
@@ -242,6 +248,11 @@ class Fleet:
                             "lon": round(lon, 5), "country": lane.country(s["km"]), **({"data": data} if data else {})})
 
     def eta(self, v: dict) -> float:
+        """Predicted delivery time (epoch s) from the truck's current state.
+
+        Remaining driving time + mandatory breaks/rests given the driver's hours so far
+        + 60 min per remaining customs border + 45 min unloading. It does not know about
+        future jams or spot checks; that uncertainty is what the ETA-accuracy KPI measures."""
         s = v["shipment"]
         lane = self.lanes[s["laneId"]]
         t, since, today = self.now, v["sinceBreakMin"], v["todayMin"]
@@ -270,6 +281,8 @@ class Fleet:
                 self._step(v)
 
     def _step(self, v: dict) -> None:
+        """One simulated minute for one truck: a small state machine over its mode
+        (IDLE → LOADING → DRIVING ⇄ BREAK/REST/HOLD → UNLOADING → TURNAROUND → IDLE)."""
         s, mode = v["shipment"], v["mode"]
         ops = self.params["operations"]
 
@@ -328,6 +341,8 @@ class Fleet:
             v["mode"], v["modeUntil"] = "IDLE", self.now
 
     def _drive(self, v: dict) -> None:
+        """Drive one minute: traffic, speed, energy/CO2e/tolls, border holds, arrival,
+        and the driving-time rules (in the same order as _hos_wait())."""
         s = v["shipment"]
         lane = self.lanes[s["laneId"]]
         p, tr = self.params, self.params["traffic"]
@@ -417,6 +432,8 @@ class Fleet:
                 s["etaBaseline"] = eta
 
     def _reefer(self, v: dict) -> None:
+        """Trailer temperature: pulled towards the setpoint, drifts while a unit fault
+        lasts; leaving the cargo's range emits TEMP_EXCURSION / TEMP_RECOVERED."""
         s = v["shipment"]
         c = s["cargo"]
         if c["tempMinC"] is None:
@@ -448,6 +465,10 @@ class Fleet:
 
     # ── messages ──────────────────────────────────────────────────────────
     def _message(self, v: dict, s: dict, sent_at: float) -> dict:
+        """Build one telemetry message (the MQTT payload) and clear the pending events.
+
+        `seq` increases by one per message of a shipment; the backend uses it to drop
+        duplicates and out-of-order deliveries."""
         lane  = self.lanes[s["laneId"]]
         cust  = self.catalog["customers"][s["customerId"]]
         lat, lon, heading = lane.position(s["km"])
@@ -519,6 +540,7 @@ class Fleet:
 
     # ── persistence ───────────────────────────────────────────────────────
     def state(self) -> dict:
+        """JSON-serialisable snapshot (saved to simulator/.state.json between runs)."""
         return {"now": self.now, "vehicles": self.vehicles}
 
     @classmethod

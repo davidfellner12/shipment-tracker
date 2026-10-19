@@ -1,3 +1,4 @@
+// / — public product page with a live map and live KPIs from the same API.
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {

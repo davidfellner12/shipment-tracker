@@ -1,3 +1,4 @@
+// Small presentational building blocks shared by all pages (cards, KPI tiles, pills, …).
 import { AlertTriangle, CheckCircle2, CircleDashed, OctagonAlert, Radio, Thermometer, Flag, ShieldAlert } from 'lucide-react';
 import { STATUS, EXCEPTION } from '../lib/format';
 

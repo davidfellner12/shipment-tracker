@@ -86,6 +86,7 @@ def int_param(params: dict, name: str, default: int, lo: int, hi: int) -> int:
 
 
 def list_shipments(params: dict) -> dict:
+    """GET /shipments: the live board, or delivered shipments with ?scope=history."""
     items = scan_all()
     now_sim, now_real = clock(items), time.time()
     if params.get("customerId"):
@@ -105,6 +106,7 @@ def list_shipments(params: dict) -> dict:
 
 
 def get_shipment(shipment_id: str) -> dict | None:
+    """GET /shipments/{id}: current state + the milestone timeline (one Query, sorted by sk)."""
     item = table.get_item(Key={"shipmentId": shipment_id}).get("Item")
     if not item:
         return None
@@ -115,6 +117,7 @@ def get_shipment(shipment_id: str) -> dict | None:
 
 
 def handler(event, context):
+    """Route the API Gateway proxy event to /metrics, /shipments/{id} or /shipments."""
     if event.get("httpMethod") == "OPTIONS":
         return respond(event, 200, {})
 

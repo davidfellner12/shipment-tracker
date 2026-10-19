@@ -1,3 +1,5 @@
+// /app — control tower. Operator: KPIs, live map and the exceptions that need attention.
+// Customer: their active loads sorted by ETA. Live list polled every 2 s, KPIs every 15 s.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, CheckCircle2, Clock4, Leaf, PackageCheck, ShieldCheck } from 'lucide-react';

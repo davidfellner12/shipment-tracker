@@ -9,8 +9,8 @@ Ownership split:
   - The GPS pipeline (process_event) owns telemetry: position, speed, ETA,
     and the sensor-derived status.
   - This endpoint owns the operator override: manualDelay + delayReason.
-get_shipments merges both when reading, so the override is not lost when the
-next GPS event arrives.
+The api Lambda (views.shipment_view) merges both when reading, so the override
+is not lost when the next GPS event arrives.
 
 Request body:  {"isDelayed": true, "delayReason": "Border control"}
 """
@@ -57,6 +57,7 @@ def respond(event: dict, status_code: int, body: dict) -> dict:
 
 
 def handler(event, context):
+    """Validate the body, then set or clear the flag. 404 if the shipment does not exist."""
     if event.get("httpMethod") == "OPTIONS":
         return respond(event, 200, {})
 
