@@ -432,7 +432,7 @@
         <li><span class="tag green">TTL</span> in-transit 7 d, delivered 90 d — no storage growth</li>
         <li><span class="tag green">Log retention</span> 2 weeks</li>
         <li><span class="tag green">Guardrail</span> AWS Budget, email at 50 / 80 / 100 %</li>
-        <li><span class="tag green">Lifecycle</span> <code>cdk destroy</code> after each session</li>
+        <li><span class="tag green">Lifecycle</span> <code>cdk destroy</code> when done; without Kinesis the idle stack costs cents</li>
       </ul>
     </div>
   </div>
@@ -455,7 +455,7 @@
 <section>
   <h2>Live Demo</h2>
   <div class="demo-step"><div class="step-num">1</div><div class="step-body">
-    <strong>Pipeline live</strong> — terminal: <code>python simulator/simulator.py --speed 30 --interval 3</code>; trucks publish over MQTT. AWS console: Kinesis incoming records, CloudWatch ops dashboard.
+    <strong>Pipeline live</strong> — terminal: <code>python simulator/simulator.py</code>; 40 trucks publish over MQTT. AWS console: CloudWatch ops dashboard (records in, ingest lag, DLQ).
   </div></div>
   <div class="demo-step"><div class="step-num">2</div><div class="step-body">
     <strong>Operator control tower</strong> (CloudFront URL → <code>/app</code>) — live map, exceptions, on-time KPIs; trucks move within seconds.

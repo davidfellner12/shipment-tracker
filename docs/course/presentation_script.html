@@ -193,13 +193,18 @@
   <div class="subtitle">Presentation Script</div>
   <div class="meta">
     <span>David Fellner</span>
-    <span>25–30 min: 10 architecture · 10 demo · 5–10 Q&amp;A</span>
+    <span>≈ 21.5 min talk: 13 slides · 8 demo · then 5 min Q&amp;A</span>
   </div>
 </div>
 
 <div class="tip">
   <strong>Before the talk</strong>
-  The stack stays deployed (Free plan, <code>-c ingest=sqs</code>; idle it costs cents). <strong>15 minutes before:</strong> start <code>python simulator\simulator.py</code> so the map is live. Have the CloudFront URL (https://d3mj6rdmmawibl.cloudfront.net), the AWS console in <strong>eu-central-1</strong> (CloudWatch dashboard, SQS, Billing) and a terminal open in tabs. Keep <code>npm run dev</code> ready as the offline fallback.
+  The stack stays deployed (Free plan, <code>-c ingest=sqs</code>; idle it costs cents).<br>
+  <em>30 minutes before</em>, in PowerShell in the project folder:<br>
+  1. <code>python scripts/reset_demo.py --yes</code> (fresh fleet: the saved simulator clock would be days old)<br>
+  2. <code>python simulator/simulator.py</code> (~8 min backfill, then live; leave this window open)<br>
+  3. Operator API key for the flag demo: <code>aws apigateway get-api-key --include-value --api-key c1wr18j0wh --query value --output text</code>, keep it in the clipboard<br>
+  4. Tabs: dashboard https://d3mj6rdmmawibl.cloudfront.net/app, AWS console in <em>eu-central-1</em> (CloudWatch dashboard <code>ShipmentTracker-dev</code>, SQS queue <code>shipment-process-event-dlq-dev</code>, Billing), a second PowerShell for the bad message, <code>infrastructure/stack.py</code> in the editor. Keep <code>npm run dev</code> ready as the offline fallback.
 </div>
 
 <div class="part">
@@ -253,7 +258,7 @@
 </blockquote>
 <h3>Cost (slide 12)</h3>
 <blockquote>
-  "Everything is pay-per-use except the Kinesis shard. Lambdas run on Graviton, data expires via TTL, logs after two weeks, a Budget emails me at 50, 80 and 100 %, and I destroy the stack after every session. One thing I learned from the cost model: an open dashboard tab costs more than the pipeline, because each poll scans the table. That's also my answer to what breaks first at scale."
+  "Everything is pay-per-use except the Kinesis shard. Lambdas run on Graviton, data expires via TTL, logs after two weeks, a Budget emails me at 50, 80 and 100 %. With Kinesis I'd destroy the stack after every session; with SQS the idle stack costs cents, so I left it up for today. One thing I learned from the cost model: an open dashboard tab costs more than the pipeline, because each poll scans the table. That's also my answer to what breaks first at scale."
 </blockquote>
 
 <div class="part">
@@ -262,7 +267,7 @@
 </div>
 
 <h2>Step 1 — Pipeline live (1 min)</h2>
-<div class="stage">Terminal: <code>python simulator/simulator.py --speed 30 --interval 3</code> (fast-forward: 30× sim speed, report every 3 s)</div>
+<div class="stage">Show the simulator window that is already running (real time, one ping per truck every 30 s)</div>
 <blockquote>"Each line is one truck: status, progress, speed, country, and whether it's on time. These go over MQTT to IoT Core."</blockquote>
 <div class="stage">AWS console → CloudWatch dashboard <code>ShipmentTracker-dev</code>: IoT → SQS records in, ingest lag, DLQ depth = 0</div>
 
@@ -281,10 +286,10 @@
 <blockquote>"And this is what the customer sees, instead of calling."</blockquote>
 
 <h2>Step 5 — Resilience (1.5 min)</h2>
-<div class="stage">Terminal (prepared beforehand):<br>
-<code>aws iot-data publish --endpoint-url https://$(aws iot describe-endpoint --endpoint-type iot:Data-ATS --query endpointAddress --output text) --topic shipments/DEMO-BAD/location --cli-binary-format raw-in-base64-out --payload '{"shipmentId":"DEMO-BAD","seq":0}'</code></div>
+<div class="stage">Second PowerShell (paste beforehand, press Enter now; tested):<br>
+<code>$ep = aws iot describe-endpoint --endpoint-type iot:Data-ATS --query endpointAddress --output text; '{"shipmentId":"DEMO-BAD","seq":0}' | Out-File -Encoding ascii -NoNewline "$env:TEMP/bad.json"; aws iot-data publish --endpoint-url "https://$ep" --topic shipments/DEMO-BAD/location --cli-binary-format raw-in-base64-out --payload "fileb://$env:TEMP/bad.json"</code></div>
 <blockquote>"A broken message: invalid sequence number. It goes through IoT and the ingest queue, the Lambda rejects it, and it lands in the dead-letter queue. The alarm emails me, and the trucks on the map keep moving."</blockquote>
-<div class="stage">SQS console → <code>shipment-process-event-dlq-dev</code> → Poll for messages → show the reason field</div>
+<div class="stage">SQS console → <code>shipment-process-event-dlq-dev</code> → Send and receive messages → Poll for messages → open it: <code>"reason": "missing/invalid seq"</code>. Afterwards: Purge the queue.</div>
 
 <h2>Step 6 — Cost (1 min)</h2>
 <div class="stage">Cost Explorer → filter by service, last N days. Then Budgets → <code>shipment-tracker-dev</code></div>
@@ -293,6 +298,15 @@
 <h2>Step 7 — Infrastructure as code (30 sec)</h2>
 <div class="stage">Editor: <code>infrastructure/stack.py</code></div>
 <blockquote>"Everything you've seen is one CDK stack: one command to deploy, one to destroy."</blockquote>
+
+<h2>Back to the slides: 13 · What breaks first at 100× (1 min)</h2>
+<blockquote>"If the fleet grew a hundred times, ingest is fine: one shard carries about 17,000 trucks and you add shards linearly. Writes are fine, because every shipment is its own partition key. The first thing to break is reads: the list API scans the table on every 2-second poll, so cost grows with table size times open tabs. The fix is known and isolated: a sparse index on active shipments, a few seconds of caching, and later push over WebSockets. For 2,000 items a scan is correct and cheap, so I kept it simple."</blockquote>
+
+<h2>15 · Trade-offs I would defend (30 sec)</h2>
+<blockquote>"Every choice on this slide has a cheaper or simpler option and a production option. I took the simple one where it meets the target, and I know what I'd change first: Kinesis for ordering and replay, polling instead of WebSockets, DynamoDB instead of RDS, a scan instead of an index, an API key instead of Cognito, and one CDK stack instead of Amplify."</blockquote>
+
+<h2>16 · Summary (30 sec)</h2>
+<blockquote>"To sum up: 3.3 seconds p95 latency measured on AWS, about 25 cents for the whole run, an ETA eight times more accurate than distance over speed, and 302 of 302 correct final states under injected faults. Every promise from the 1-pager is delivered in one CDK stack, and each pillar comes with evidence. Next steps would be Cognito with tenants, the sparse index, WebSocket push and Amazon Location Service for routes. Thank you, I'm happy to take questions."</blockquote>
 
 <div class="part">
   PART 3 — Q&amp;A Preparation
