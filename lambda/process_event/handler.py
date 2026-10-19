@@ -1,6 +1,7 @@
 """
 Lambda: process_event
-Triggered by Kinesis Data Stream (fed by the IoT Core rule).
+Triggered by Kinesis Data Stream (fed by the IoT Core rule), or by an SQS
+queue when the stack is deployed with `-c ingest=sqs`.
 
 For each telemetry message:
   1. validate it (poison records → DLQ, never retried)
@@ -64,9 +65,22 @@ def parse_ts(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def record_id(record: dict) -> str | None:
+    """Kinesis sequence number or SQS message id — what batchItemFailures expects."""
+    if "kinesis" in record:
+        return record["kinesis"].get("sequenceNumber")
+    return record.get("messageId")
+
+
+def record_body(record: dict) -> str:
+    if "kinesis" in record:
+        return base64.b64decode(record["kinesis"]["data"]).decode("utf-8")
+    return record["body"]                      # SQS ingest (Free-plan accounts, no Kinesis)
+
+
 def parse_record(record: dict) -> dict:
     try:
-        raw = base64.b64decode(record["kinesis"]["data"]).decode("utf-8")
+        raw = record_body(record)
         msg = json.loads(raw, parse_float=Decimal)
     except (KeyError, ValueError, UnicodeDecodeError) as exc:
         raise InvalidEvent(f"undecodable record: {exc}") from exc
@@ -164,8 +178,8 @@ def send_to_dlq(record: dict, reason: str) -> None:
     sqs.send_message(QueueUrl=DLQ_URL, MessageBody=json.dumps({
         "source":         "process_event.validation",
         "reason":         reason,
-        "sequenceNumber": record.get("kinesis", {}).get("sequenceNumber"),
-        "data":           record.get("kinesis", {}).get("data"),
+        "sequenceNumber": record_id(record),
+        "data":           record.get("kinesis", {}).get("data") or record.get("body"),
     }))
 
 
@@ -176,7 +190,7 @@ def handler(event, context):
     now = int(time.time())
 
     for record in records:
-        seq = record.get("kinesis", {}).get("sequenceNumber")
+        seq = record_id(record)
         sid = "?"
         try:
             msg = parse_record(record)
@@ -201,4 +215,9 @@ def handler(event, context):
 
     logger.info("Processed %d records — success=%d skipped=%d invalid=%d failed=%d",
                 len(records), success, skipped, invalid, len(failures))
+    # SQS ingest: split latency into "before the queue" and "waiting in the queue"
+    sqs_attrs = [r["attributes"] for r in records if "SentTimestamp" in r.get("attributes", {})]
+    if sqs_attrs:
+        queued_ms = max(time.time() * 1000 - int(a["SentTimestamp"]) for a in sqs_attrs)
+        logger.info("Ingest timing — max time since enqueue %d ms", queued_ms)
     return {"batchItemFailures": failures}

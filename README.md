@@ -41,6 +41,7 @@ cd dashboard && npm run build && cd ../infrastructure
 pip install -r requirements.txt && cdk bootstrap && cdk deploy -c alertEmail=you@example.com
 cd .. && python scripts/provision_device.py && python simulator/simulator.py
 ```
+On an AWS Free-plan account (no Kinesis) add `-c ingest=sqs`: IoT Core then feeds the same Lambda through SQS.
 Tear down afterwards with `python scripts/provision_device.py --revoke` and `cdk destroy`.
 
 ## Repository

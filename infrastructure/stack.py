@@ -20,6 +20,8 @@ Context (cdk.json or `cdk deploy -c key=value`):
   alertEmail     email for alarms and budget alerts (optional but recommended)
   monthlyBudget  USD, default 10
   allowedOrigins comma-separated extra CORS origins (default http://localhost:3000)
+  ingest         "kinesis" (default) or "sqs" — SQS for accounts on the AWS Free plan,
+                 which does not include Kinesis (IoT → SQS → Lambda, same handler)
 """
 
 from pathlib import Path
@@ -65,9 +67,13 @@ class ShipmentTrackerStack(Stack):
                  monthly_budget_usd: float = 10,
                  extra_origins: list[str] | None = None,
                  deploy_frontend: bool | None = None,
+                 ingest: str = "kinesis",
                  **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
+        if ingest not in ("kinesis", "sqs"):
+            raise ValueError(f"ingest must be 'kinesis' or 'sqs', not {ingest!r}")
+        use_kinesis = ingest == "kinesis"
         is_prod = stage == "prod"
         removal = RemovalPolicy.RETAIN if is_prod else RemovalPolicy.DESTROY
         if deploy_frontend is None:
@@ -115,14 +121,18 @@ class ShipmentTrackerStack(Stack):
         # Trade-off: a provisioned shard costs ~$0.015/h (~$11/month) even idle —
         # this is the largest line item. Destroy the stack after the demo.
         # Scaling: 1 shard = 1 MB/s or 1000 records/s in → ~3000 trucks at 1 msg/3 s.
-        stream = kinesis.Stream(
-            self, "ShipmentStream",
-            stream_name=f"shipment-location-stream-{stage}",
-            shard_count=1,
-            retention_period=Duration.hours(24),
-            encryption=kinesis.StreamEncryption.MANAGED,
-        )
-        stream.apply_removal_policy(removal)
+        # Free-plan fallback (ingest=sqs): a standard SQS queue. No ordering, but
+        # process_event is seq-guarded and order-independent, so the result is the same.
+        stream = ingest_queue = None
+        if use_kinesis:
+            stream = kinesis.Stream(
+                self, "ShipmentStream",
+                stream_name=f"shipment-location-stream-{stage}",
+                shard_count=1,
+                retention_period=Duration.hours(24),
+                encryption=kinesis.StreamEncryption.MANAGED,
+            )
+            stream.apply_removal_policy(removal)
 
         # ── 3. Dead-Letter Queue ──────────────────────────────────────────
         # Receives: (a) IoT rule errors (Kinesis put failed), (b) invalid
@@ -135,6 +145,16 @@ class ShipmentTrackerStack(Stack):
             encryption=sqs.QueueEncryption.SQS_MANAGED,
             enforce_ssl=True,
         )
+        if not use_kinesis:
+            ingest_queue = sqs.Queue(
+                self, "IngestQueue",
+                queue_name=f"shipment-location-ingest-{stage}",
+                visibility_timeout=Duration.seconds(180),   # 6 × Lambda timeout
+                retention_period=Duration.hours(24),
+                encryption=sqs.QueueEncryption.SQS_MANAGED,
+                enforce_ssl=True,
+                dead_letter_queue=sqs.DeadLetterQueue(queue=dlq, max_receive_count=4),
+            )
 
         # ── 4. Frontend hosting (S3 + CloudFront) ─────────────────────────
         # Private bucket, served only via CloudFront Origin Access Control.
@@ -213,19 +233,31 @@ class ShipmentTrackerStack(Stack):
         # report_batch_item_failures: handler returns failed sequence numbers so
         #   only those (and later) records are retried, not the whole batch.
         # max_record_age: don't retry events older than 1 h — stale GPS is useless.
-        process_fn.add_event_source(
-            lambda_events.KinesisEventSource(
-                stream,
-                starting_position=lambda_.StartingPosition.LATEST,
-                batch_size=100,
-                max_batching_window=Duration.seconds(1),
-                bisect_batch_on_error=True,
-                report_batch_item_failures=True,
-                retry_attempts=3,
-                max_record_age=Duration.hours(1),
-                on_failure=lambda_events.SqsDlq(dlq),
+        if use_kinesis:
+            process_fn.add_event_source(
+                lambda_events.KinesisEventSource(
+                    stream,
+                    starting_position=lambda_.StartingPosition.LATEST,
+                    batch_size=100,
+                    max_batching_window=Duration.seconds(1),
+                    bisect_batch_on_error=True,
+                    report_batch_item_failures=True,
+                    retry_attempts=3,
+                    max_record_age=Duration.hours(1),
+                    on_failure=lambda_events.SqsDlq(dlq),
+                )
             )
-        )
+        else:
+            # Retries come from the queue's redrive policy (4 receives → DLQ).
+            # No batching window: with one, messages waited up to ~10 s in the
+            # queue (measured); without, ~0.3 s.
+            process_fn.add_event_source(
+                lambda_events.SqsEventSource(
+                    ingest_queue,
+                    batch_size=10,
+                    report_batch_item_failures=True,
+                )
+            )
 
         # 512 MB: /metrics scans and aggregates up to a few thousand items
         get_fn = make_fn("ApiFn", "api", 512, 15)
@@ -356,12 +388,29 @@ class ShipmentTrackerStack(Stack):
             },
         )
 
-        iot_kinesis_role = iam.Role(
+        iot_ingest_role = iam.Role(
             self, "IoTKinesisRole",
             assumed_by=iam.ServicePrincipal("iot.amazonaws.com"),
-            description="Allows IoT Core to put records into Kinesis",
+            description=f"Allows IoT Core to put records into {'Kinesis' if use_kinesis else 'the ingest queue'}",
         )
-        stream.grant_write(iot_kinesis_role)
+        if use_kinesis:
+            stream.grant_write(iot_ingest_role)
+            ingest_action = iot.CfnTopicRule.ActionProperty(
+                kinesis=iot.CfnTopicRule.KinesisActionProperty(
+                    role_arn=iot_ingest_role.role_arn,
+                    stream_name=stream.stream_name,
+                    partition_key="${topic(2)}",
+                )
+            )
+        else:
+            ingest_queue.grant_send_messages(iot_ingest_role)
+            ingest_action = iot.CfnTopicRule.ActionProperty(
+                sqs=iot.CfnTopicRule.SqsActionProperty(
+                    queue_url=ingest_queue.queue_url,
+                    role_arn=iot_ingest_role.role_arn,
+                    use_base64=False,
+                )
+            )
 
         iot_dlq_role = iam.Role(
             self, "IoTDLQRole",
@@ -374,19 +423,11 @@ class ShipmentTrackerStack(Stack):
         # events of one truck land on the same shard in order.
         iot.CfnTopicRule(
             self, "ShipmentLocationRule",
-            rule_name=f"shipment_location_to_kinesis_{stage}",
+            rule_name=f"shipment_location_to_{ingest}_{stage}",
             topic_rule_payload=iot.CfnTopicRule.TopicRulePayloadProperty(
                 sql=f"SELECT * FROM '{IOT_TOPIC_PREFIX}/+/location'",
                 aws_iot_sql_version="2016-03-23",
-                actions=[
-                    iot.CfnTopicRule.ActionProperty(
-                        kinesis=iot.CfnTopicRule.KinesisActionProperty(
-                            role_arn=iot_kinesis_role.role_arn,
-                            stream_name=stream.stream_name,
-                            partition_key="${topic(2)}",
-                        )
-                    )
-                ],
+                actions=[ingest_action],
                 error_action=iot.CfnTopicRule.ActionProperty(
                     sqs=iot.CfnTopicRule.SqsActionProperty(
                         queue_url=dlq.queue_url,
@@ -409,6 +450,7 @@ class ShipmentTrackerStack(Stack):
                     s3deploy.Source.json_data("config.json", {
                         "apiUrl": api.url,
                         "stage":  stage,
+                        "ingest": ingest,
                     }),
                 ],
                 destination_bucket=site_bucket,
@@ -435,8 +477,16 @@ class ShipmentTrackerStack(Stack):
             a.add_alarm_action(cw_actions.SnsAction(alarm_topic))
             return a
 
-        iterator_age = stream.metric_get_records_iterator_age_milliseconds(
-            statistic="Maximum", period=Duration.minutes(1))
+        if use_kinesis:
+            iterator_age = stream.metric_get_records_iterator_age_milliseconds(
+                statistic="Maximum", period=Duration.minutes(1))
+            records_in = stream.metric_incoming_records(period=Duration.minutes(1))
+        else:
+            iterator_age = cw.MathExpression(   # seconds → ms, same threshold as Kinesis
+                expression="age * 1000", label="Oldest message age (ms)", period=Duration.minutes(1),
+                using_metrics={"age": ingest_queue.metric_approximate_age_of_oldest_message(
+                    statistic="Maximum", period=Duration.minutes(1))})
+            records_in = ingest_queue.metric_number_of_messages_sent(period=Duration.minutes(1))
         dlq_depth = dlq.metric_approximate_number_of_messages_visible(period=Duration.minutes(1))
         api_5xx = api.metric_server_error(period=Duration.minutes(5))
         api_latency = api.metric_latency(period=Duration.minutes(1), statistic="p95")
@@ -446,7 +496,7 @@ class ShipmentTrackerStack(Stack):
         alarm("ProcessErrorsAlarm", process_fn.metric_errors(period=Duration.minutes(5)), 1,
               "process_event Lambda is failing.")
         alarm("StreamLagAlarm", iterator_age, 30_000,
-              "Kinesis consumer is >30 s behind — the <5 s latency target is broken.", periods=3)
+              f"{'Kinesis consumer' if use_kinesis else 'Ingest queue'} is >30 s behind — the <5 s latency target is broken.", periods=3)
         alarm("Api5xxAlarm", api_5xx, 5, "API Gateway is returning 5xx errors.")
 
         cw.Dashboard(
@@ -454,8 +504,8 @@ class ShipmentTrackerStack(Stack):
             dashboard_name=f"ShipmentTracker-{stage}",
             widgets=[
                 [
-                    cw.GraphWidget(title="IoT → Kinesis records in",
-                                   left=[stream.metric_incoming_records(period=Duration.minutes(1))]),
+                    cw.GraphWidget(title=f"IoT → {'Kinesis' if use_kinesis else 'SQS'} records in",
+                                   left=[records_in]),
                     cw.GraphWidget(title="Consumer lag (ms)", left=[iterator_age]),
                     cw.GraphWidget(title="DLQ depth", left=[dlq_depth]),
                 ],
@@ -503,7 +553,10 @@ class ShipmentTrackerStack(Stack):
         CfnOutput(self, "IoTPolicyName", value=iot_policy.policy_name)
         CfnOutput(self, "ShipmentsTableName", value=shipments_table.table_name)
         CfnOutput(self, "EventsTableName", value=events_table.table_name)
-        CfnOutput(self, "KinesisStreamName", value=stream.stream_name)
+        if use_kinesis:
+            CfnOutput(self, "KinesisStreamName", value=stream.stream_name)
+        else:
+            CfnOutput(self, "IngestQueueUrl", value=ingest_queue.queue_url)
         CfnOutput(self, "DLQUrl", value=dlq.queue_url)
         if distribution:
             CfnOutput(self, "DashboardUrl", value=f"https://{distribution.distribution_domain_name}")

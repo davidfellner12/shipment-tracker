@@ -21,6 +21,12 @@ def kinesis_event(*payloads):
     return {"Records": records}
 
 
+def sqs_event(*payloads):
+    """Build an SQS event, as delivered with the stack's ingest=sqs option."""
+    return {"Records": [{"messageId": f"m{i}", "body": p if isinstance(p, str) else json.dumps(p)}
+                        for i, p in enumerate(payloads)]}
+
+
 def api_event(method, shipment_id=None, body=None, resource="/shipments", params=None,
               origin="http://localhost:3000"):
     return {
@@ -122,6 +128,17 @@ def test_transient_errors_are_reported_as_batch_failures(aws, history, monkeypat
 
     monkeypatch.setattr(process, "upsert_state", boom)
     assert process.handler(kinesis_event(history[0]), None) == {"batchItemFailures": [{"itemIdentifier": "0"}]}
+    assert process.handler(sqs_event(history[0]), None) == {"batchItemFailures": [{"itemIdentifier": "m0"}]}
+
+
+def test_sqs_ingest_matches_kinesis(aws, history):
+    process = load_handler("process_event")
+    own = [m for m in history if m["shipmentId"] == history[0]["shipmentId"]]
+    assert process.handler(sqs_event(*reversed(own[:5]), "not json"), None) == {"batchItemFailures": []}
+    item = aws["table"].get_item(Key={"shipmentId": own[0]["shipmentId"]})["Item"]
+    assert item["seq"] == own[4]["seq"]                  # newest wins regardless of order
+    msgs = boto3.client("sqs").receive_message(QueueUrl=aws["queue_url"], MaxNumberOfMessages=10)["Messages"]
+    assert len(msgs) == 1
 
 
 def test_operator_flag_survives_next_gps_event(aws, history):

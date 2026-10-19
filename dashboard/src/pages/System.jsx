@@ -1,20 +1,28 @@
 import { Cpu, Database, Radio, Waves, Globe, Cloud, ArrowRight, Gauge, Activity, Timer } from 'lucide-react';
-import { api, isMock } from '../lib/api';
+import { api, isMock, ingestMode } from '../lib/api';
 import { usePoll } from '../lib/session';
 import { ago, num } from '../lib/format';
 import { Card, Kpi, PageHeader, Pill } from '../components/ui';
 
 const PIPELINE = [
   [Radio, 'AWS IoT Core', 'MQTT over TLS, X.509 device certs, topic rule'],
-  [Waves, 'Kinesis Data Streams', 'Ordered, replayable 24 h buffer'],
+  null, // ingest buffer, depends on the deployed stack (see buffer())
   [Cpu, 'Lambda · process_event', 'Validate, dedupe (seq), write state + events'],
   [Database, 'DynamoDB', 'Shipments (state) + ShipmentEvents (timeline)'],
   [Cloud, 'API Gateway + Lambda', 'GET /shipments, /metrics · PUT with API key'],
   [Globe, 'CloudFront + S3', 'This dashboard, HTTPS, security headers'],
 ];
 
+const BUFFER = {
+  kinesis: [Waves, 'Kinesis Data Streams', 'Ordered, replayable 24 h buffer'],
+  sqs:     [Waves, 'Amazon SQS', 'Ingest queue (Free plan: no Kinesis); seq makes order irrelevant'],
+};
+const BUFFER_COST = {
+  kinesis: ['Kinesis Data Streams', '1 provisioned shard', '≈ $11 / month (largest item)'],
+  sqs:     ['Amazon SQS', 'ingest queue, per request', 'free tier / cents'],
+};
+
 const COSTS = [
-  ['Kinesis Data Streams', '1 provisioned shard', '≈ $11 / month (largest item)'],
   ['AWS IoT Core', '40 trucks × 1 msg / 30 s', '≈ $0.12 / day (≈ $1.15 / day in fast demo mode)'],
   ['Lambda, API Gateway, DynamoDB', 'on-demand', 'free tier / cents'],
   ['CloudFront + S3', 'static site', 'free tier'],
@@ -28,6 +36,9 @@ function percentile(values, p) {
 }
 
 export default function System() {
+  const mode = ingestMode();
+  const pipeline = PIPELINE.map((step) => step || BUFFER[mode]);
+  const costs = [BUFFER_COST[mode], ...COSTS];
   const { data } = usePoll(() => api.listShipments({}), [], 2000);
   const live = (data?.shipments || []).filter((s) => s.status !== 'DELIVERED');
   const lat = live.map((s) => s.ingestLatencyMs).filter((v) => v != null);
@@ -52,12 +63,12 @@ export default function System() {
 
       <Card title="Data flow" subtitle="Every GPS ping takes this path in about a second" className="mt-4">
         <ol className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {PIPELINE.map(([Icon, name, what], i) => (
+          {pipeline.map(([Icon, name, what], i) => (
             <li key={name} className="relative rounded-lg border border-line bg-subtle/40 p-4">
               <Icon size={18} className="text-accent" />
               <div className="mt-2 text-sm font-semibold text-ink">{name}</div>
               <div className="mt-1 text-xs leading-relaxed text-ink-3">{what}</div>
-              {i < PIPELINE.length - 1 && <ArrowRight size={14} className="absolute -right-2.5 top-1/2 hidden -translate-y-1/2 text-ink-3 xl:block" />}
+              {i < pipeline.length - 1 && <ArrowRight size={14} className="absolute -right-2.5 top-1/2 hidden -translate-y-1/2 text-ink-3 xl:block" />}
             </li>
           ))}
         </ol>
@@ -71,7 +82,7 @@ export default function System() {
       <Card title="Running cost" subtitle="eu-central-1, pay-per-use — no servers to run" className="mt-4">
         <table className="w-full text-sm">
           <tbody className="divide-y divide-line">
-            {COSTS.map(([svc, basis, cost]) => (
+            {costs.map(([svc, basis, cost]) => (
               <tr key={svc}>
                 <td className="py-2.5 pr-4 text-ink">{svc}</td>
                 <td className="py-2.5 pr-4 text-ink-3">{basis}</td>
@@ -80,7 +91,7 @@ export default function System() {
             ))}
           </tbody>
         </table>
-        <p className="mt-3 text-xs text-ink-3">A one-week proof of concept stays under $5. Run <code className="rounded bg-subtle px-1">cdk destroy</code> afterwards — the Kinesis shard bills while idle.</p>
+        <p className="mt-3 text-xs text-ink-3">A one-week proof of concept stays under $5. Run <code className="rounded bg-subtle px-1">cdk destroy</code> afterwards{mode === 'kinesis' ? ' — the Kinesis shard bills while idle' : ''}.</p>
       </Card>
     </>
   );

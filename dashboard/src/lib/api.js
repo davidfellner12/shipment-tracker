@@ -4,13 +4,18 @@
 
 let API_URL = '';
 let MOCK = true;
+let INGEST = 'kinesis';
 let backend = null;
 
 export async function loadConfig() {
   let url = '';
   try {
     const res = await fetch('/config.json', { cache: 'no-store' });
-    if (res.ok && res.headers.get('content-type')?.includes('json')) url = (await res.json()).apiUrl || '';
+    if (res.ok && res.headers.get('content-type')?.includes('json')) {
+      const cfg = await res.json();
+      url = cfg.apiUrl || '';
+      INGEST = cfg.ingest || INGEST;
+    }
   } catch { /* no runtime config */ }
   url = url || import.meta.env.VITE_API_URL || '';
   API_URL = url.replace(/\/+$/, '');
@@ -22,6 +27,8 @@ export async function loadConfig() {
 }
 
 export const isMock = () => MOCK;
+// 'kinesis' or 'sqs' (stack deployed with -c ingest=sqs, e.g. on the AWS Free plan)
+export const ingestMode = () => INGEST;
 
 async function get(path, params = {}) {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));

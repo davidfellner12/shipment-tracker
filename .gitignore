@@ -29,3 +29,6 @@ simulator/.state.json
 # Report build
 report/node_modules/
 report/report.html
+
+# Deploy outputs (account-specific)
+cdk-outputs.json

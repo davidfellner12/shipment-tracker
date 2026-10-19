@@ -53,3 +53,17 @@ def test_budget_and_alarms_only_with_email():
     t.resource_count_is("AWS::Budgets::Budget", 1)
     t.resource_count_is("AWS::CloudWatch::Alarm", 4)
     t.resource_count_is("AWS::DynamoDB::Table", 2)
+
+
+def test_sqs_ingest_replaces_kinesis():
+    t = synth(ingest="sqs", alert_email="ops@example.com")
+    t.resource_count_is("AWS::Kinesis::Stream", 0)
+    t.resource_count_is("AWS::SQS::Queue", 2)
+    t.has_resource_properties("AWS::SQS::Queue", {"RedrivePolicy": Match.object_like({"maxReceiveCount": 4})})
+    t.has_resource_properties("AWS::Lambda::EventSourceMapping", {
+        "FunctionResponseTypes": ["ReportBatchItemFailures"],
+    })
+    t.has_resource_properties("AWS::IoT::TopicRule", {"TopicRulePayload": Match.object_like({
+        "Actions": [{"Sqs": Match.object_like({"UseBase64": False})}],
+    })})
+    t.resource_count_is("AWS::CloudWatch::Alarm", 4)

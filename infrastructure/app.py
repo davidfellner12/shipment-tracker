@@ -4,6 +4,7 @@ TU Wien × AWS 2026 — David Fellner
 
   cdk deploy -c alertEmail=you@example.com                # dev stage
   cdk deploy -c stage=prod -c alertEmail=you@example.com  # retain data, PITR on
+  cdk deploy -c ingest=sqs -c alertEmail=you@example.com  # AWS Free plan (no Kinesis)
 """
 
 import aws_cdk as cdk
@@ -23,6 +24,7 @@ stack = ShipmentTrackerStack(
     alert_email=ctx("alertEmail"),
     monthly_budget_usd=float(ctx("monthlyBudget") or 10),
     extra_origins=extra_origins,
+    ingest=ctx("ingest") or "kinesis",
     env=cdk.Environment(
         account=ctx("account"),
         region=ctx("region") or "eu-central-1",

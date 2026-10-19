@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, Link } from 'react-router-dom';
 import { LayoutDashboard, Package, BarChart3, Truck, Server, Moon, Sun, Menu, X, Building2 } from 'lucide-react';
 import { useSession } from '../lib/session';
-import { isMock } from '../lib/api';
+import { isMock, ingestMode } from '../lib/api';
 import { BRAND, CARRIER, CUSTOMERS } from '../lib/format';
 import { cx } from './ui';
 
@@ -86,7 +86,7 @@ function Sidebar({ onNavigate }) {
             {isMock() ? 'Demo data · simulated fleet' : 'Live · AWS pipeline'}
           </div>
           <p className="mt-1 leading-relaxed">
-            {isMock() ? 'Runs fully in your browser. Deploy the stack to stream real telemetry.' : 'IoT Core → Kinesis → Lambda → DynamoDB'}
+            {isMock() ? 'Runs fully in your browser. Deploy the stack to stream real telemetry.' : `IoT Core → ${ingestMode() === 'sqs' ? 'SQS' : 'Kinesis'} → Lambda → DynamoDB`}
           </p>
         </div>
         <div className="flex items-center justify-between px-1">

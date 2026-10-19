@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Presentation Script — Real-Time Shipment Tracker</title>
+<title>Tracelane Presentation Script</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
@@ -157,7 +157,9 @@
   }
   td { padding: 8px 14px; border-bottom: 1px solid #eee; }
   tr:nth-child(even) td { background: #f7f7f7; }
-  tr:last-child td { background: #fff3cd; font-weight: 700; border-bottom: none; }
+  tr.total td { background: #fff3cd; font-weight: 700; border-bottom: none; }
+  .todo { background: #fff3cd; border: 1px dashed #f0a500; border-radius: 3px; padding: 0 4px; font-style: normal; font-weight: 600; }
+  code { background: #f1f3f5; border-radius: 3px; padding: 0 4px; font-size: 9.5pt; }
 
   .tip {
     background: #e8f5e9;
@@ -187,82 +189,71 @@
 
 <div class="cover">
   <div class="tag">TU Wien × Amazon Web Services 2026</div>
-  <h1>Real-Time Shipment Tracker</h1>
-  <div class="subtitle">Presentation Script — Group 8</div>
+  <h1>Tracelane — Real-Time Shipment Tracker</h1>
+  <div class="subtitle">Presentation Script</div>
   <div class="meta">
     <span>David Fellner</span>
-    <span>June 26, 2026 &nbsp;·&nbsp; 12:00–12:25</span>
-    <span>FAV HS2</span>
+    <span>25–30 min: 10 architecture · 10 demo · 5–10 Q&amp;A</span>
   </div>
+</div>
+
+<div class="tip">
+  <strong>Before the talk</strong>
+  The stack stays deployed (Free plan, <code>-c ingest=sqs</code>; idle it costs cents). <strong>15 minutes before:</strong> start <code>python simulator\simulator.py</code> so the map is live. Have the CloudFront URL (https://d3mj6rdmmawibl.cloudfront.net), the AWS console in <strong>eu-central-1</strong> (CloudWatch dashboard, SQS, Billing) and a terminal open in tabs. Keep <code>npm run dev</code> ready as the offline fallback.
 </div>
 
 <div class="part">
   PART 1 — Use Case &amp; Architecture
-  <span class="duration">~8 minutes</span>
+  <span class="duration">~13 minutes</span>
 </div>
 
-<h2>Opening (30 sec)</h2>
+<h2>Slide 1–2 · Opening &amp; Problem (1.5 min)</h2>
 <blockquote>
-  "Hello everyone. My name is David Fellner and my project is a Real-Time Shipment Tracker — a fully serverless AWS pipeline that ingests live GPS events from delivery vehicles, processes them in real time, and displays them on a live map dashboard."
+  "Hello, I'm David Fellner. My project is Tracelane, a fully serverless AWS pipeline that tracks a truck fleet in real time and predicts arrival times.<br><br>
+  The problem from my 1-pager: carriers cannot tell their customers where a shipment is right now. Tracking runs on spreadsheets and phone calls, and about 60 % of customer calls are simply 'where is my order?'. Each of these numbers maps to one feature: a live map with a realistic ETA, a full timeline with proof of delivery, and a public tracking page the customer can open instead of calling."
 </blockquote>
 
-<h2>Problem &amp; Use Case (1.5 min)</h2>
+<h2>Slide 3 · Promise → Delivered (1 min)</h2>
 <blockquote>
-  "Imagine you run a logistics company with 50 trucks driving across Europe. Your customers want to know: where is my shipment right now, and will it arrive on time?<br><br>
-  The challenge: GPS devices send position updates every few seconds — thousands of events per minute. You need infrastructure that:
-  <ul>
-    <li><strong>scales</strong> as your fleet grows,</li>
-    <li><strong>loses no data</strong>, even if a device briefly disconnects,</li>
-    <li>is <strong>cheap</strong> — you don't want to run servers 24/7 for a fluctuating workload,</li>
-    <li>and reacts <strong>in real time</strong>, not with a 10-minute delay.</li>
-  </ul>
-  That's exactly what this system solves."
+  "In April I made concrete promises: this architecture, under 5 seconds latency, under 5 dollars for the whole PoC, a live status update, and two Well-Architected pillars. This slide is the scorecard. Latency measured on AWS over 757 live messages: median 0.8 seconds, p95 3.3 seconds. Total cost of the AWS run: about 25 cents. One change: I host on S3 and CloudFront instead of Amplify, and I'll explain why."
 </blockquote>
 
-<h2>Architecture — Service by Service (5 min)</h2>
-<blockquote>"Let me walk through the architecture. Every service choice has a concrete reason."</blockquote>
-
-<div class="arch">Python Simulator  →  AWS IoT Core  →  Amazon Kinesis Data Streams
-                                              ↓
-                              AWS Lambda (process_event)  →  Amazon DynamoDB
-                                                                     ↓
-                              API Gateway  →  AWS Lambda (get_shipments)  →  React Dashboard (Amplify)</div>
-
-<h3>AWS IoT Core</h3>
+<h2>Slide 4–5 · Architecture &amp; service choices (3 min)</h2>
 <blockquote>
-  "GPS devices connect via MQTT — the standard IoT protocol, ultra-lightweight and resilient on poor connections. I chose IoT Core over sending directly to Kinesis because IoT Core provides certificate-based device authentication — each device has its own TLS certificate, no passwords or API keys that could be stolen. The built-in Rules Engine forwards MQTT messages to Kinesis with zero custom code."
+  "A simulator drives 40 trucks on 156 real European road lanes. Telemetry goes over MQTT to IoT Core, which authenticates with an X.509 certificate. An IoT rule writes every message into Kinesis, partitioned by shipment. A Lambda consumes the stream and writes the current state and the milestone history to DynamoDB. The dashboard is a static React app on S3 behind CloudFront and reads through API Gateway and a second Lambda.<br><br>
+  For each service I considered an alternative." <em>(Walk the table — one sentence per row.)</em>
 </blockquote>
 
-<h3>Amazon Kinesis Data Streams</h3>
+<h2>Slide 6 · Why Kinesis (1 min)</h2>
 <blockquote>
-  "Events land in Kinesis — an ordered, replayable data stream. Why not SQS? SQS is a queue for individual tasks. Kinesis is better for continuous high-volume data streams like GPS updates. Key advantage: if Lambda fails, Kinesis replays the events automatically — no data loss. I use On-Demand mode, so it scales automatically with traffic."
+  "Kinesis is the one service I could have left out, because IoT rules can call Lambda directly. I kept it for three reasons: one truck's pings stay in order, 24 hours of replay if a Lambda has a bug, and a buffer for bursts. The price is one provisioned shard, 36 cents a day, the biggest line item of the whole PoC. From the measured message size of 1.76 KB, one shard handles about 17,000 trucks.<br><br>
+  One honest note: my AWS account is on the Free plan, which doesn't include Kinesis. So the stack has a switch, and for the measured run I deployed it with SQS in Kinesis's place, feeding the same Lambda. I lose ordering, which my sequence-number check already makes irrelevant, and replay, which is the real reason Kinesis is the production design."
 </blockquote>
 
-<h3>AWS Lambda — process_event</h3>
+<h2>Slide 7 · Idempotent ingestion (1 min)</h2>
 <blockquote>
-  "Kinesis triggers a Lambda function that processes each GPS event: parses coordinates, calculates status — on time, delayed, arriving soon — and writes the result to DynamoDB. Why Lambda over EC2? No persistent compute needed. Lambda runs only when events arrive and I pay per invocation only. Perfect for spiky, event-driven workloads."
+  "MQTT QoS 1 and Kinesis retries both deliver duplicates, and the network reorders. So every message carries a per-shipment sequence number and DynamoDB only accepts a newer one: a conditional write. Invalid messages go straight to a dead-letter queue and are never retried; transient errors retry only from the failed record."
 </blockquote>
 
-<h3>Amazon DynamoDB</h3>
+<h2>Slide 8 · ETA (1 min)</h2>
 <blockquote>
-  "Processed shipment data is stored in DynamoDB, keyed by shipmentId. Each GPS update overwrites the current position. Why not RDS? My access pattern is simple — fetch by ID or fetch all — no joins, no SQL needed. DynamoDB gives me single-digit millisecond latency and is also serverless."
+  "EU drivers must take a 45-minute break after 4.5 hours and an 11-hour rest after 9. Distance divided by speed ignores that and is off by 220 minutes on average early in the trip. With the driving-time rules it's 27, eight times better. Honest caveat: the predictor shares rules with the simulator, so this is an upper bound."
 </blockquote>
 
-<h3>API Gateway + React Dashboard</h3>
+<h2>Slides 9–12 · Pillars (4 min, graded: take your time here)</h2>
+<h3>Reliability (slides 9–10)</h3>
 <blockquote>
-  "The frontend polls a REST endpoint via API Gateway and a second Lambda every few seconds. The React dashboard with Leaflet maps renders each shipment as a colored pulsing marker — cyan for in-transit, green for on-time, red for delayed. Hosted on AWS Amplify for automatic HTTPS and CDN delivery."
+  "Latency: the backend stamps how long each message took from the truck to DynamoDB; the dashboard polls every 2 seconds. An alarm fires if the stream falls more than 30 seconds behind.<br>
+  I tested reliability like a chaos experiment: replay the same messages with 20 % duplicates, 2 % malformed and reordered. Hypothesis: same final state. Result: 302 of 302 shipments identical, all 58 bad messages in the DLQ. The experiment also found two real bugs, which I fixed.<br><br>
+  And on the live AWS run I got a real fault for free: AWS KMS returned a 500 on one DynamoDB write. The Lambda reported just that message as failed, SQS redelivered it, the lag alarm emailed me, and the dead-letter queue stayed empty. Nothing was lost."
 </blockquote>
-
-<h2>Well-Architected Pillars (1.5 min)</h2>
-
-<h3>Cost Optimization</h3>
+<h3>Security (slide 11)</h3>
 <blockquote>
-  "The entire stack is serverless — I pay exactly proportional to usage. No idle servers. For this PoC the total cost is under $5, even with hours of testing. Kinesis On-Demand, Lambda per-invocation pricing, DynamoDB On-Demand — all elastic."
+  "The device policy only allows our client IDs and only publishing to the location topics. Every Lambda has its own role with exactly the DynamoDB actions it needs. Writes need an API key with a usage plan; everything is encrypted at rest and in transit. Known gap: an API key is not a user identity. In production I'd add Cognito."
 </blockquote>
-
-<h3>Security</h3>
+<h3>Cost (slide 12)</h3>
 <blockquote>
-  "Three layers: First, IoT Core uses X.509 certificate authentication — no device connects without a valid certificate. Second, IAM Least Privilege — the processing Lambda can only write to DynamoDB, nothing else. Third, no hardcoded credentials — all endpoints and keys come from CDK outputs and environment variables, never in source code."
+  "Everything is pay-per-use except the Kinesis shard. Lambdas run on Graviton, data expires via TTL, logs after two weeks, a Budget emails me at 50, 80 and 100 %, and I destroy the stack after every session. One thing I learned from the cost model: an open dashboard tab costs more than the pipeline, because each poll scans the table. That's also my answer to what breaks first at scale."
 </blockquote>
 
 <div class="part">
@@ -270,67 +261,97 @@
   <span class="duration">~8 minutes</span>
 </div>
 
-<h2>Step 1 — Start the Simulator</h2>
-<blockquote>
-  "This is the Python simulator. It simulates delivery vehicles sending GPS coordinates to AWS IoT Core over MQTT. You can see the events firing in real time — each line is a position update from a different vehicle."
-</blockquote>
-<div class="stage">Start simulator — show terminal output with GPS events firing</div>
+<h2>Step 1 — Pipeline live (1 min)</h2>
+<div class="stage">Terminal: <code>python simulator/simulator.py --speed 30 --interval 3</code> (fast-forward: 30× sim speed, report every 3 s)</div>
+<blockquote>"Each line is one truck: status, progress, speed, country, and whether it's on time. These go over MQTT to IoT Core."</blockquote>
+<div class="stage">AWS console → CloudWatch dashboard <code>ShipmentTracker-dev</code>: IoT → SQS records in, ingest lag, DLQ depth = 0</div>
 
-<h2>Step 2 — Open the Dashboard</h2>
-<blockquote>
-  "Here's the live dashboard. The map shows Europe — and you can see the vehicles updating their positions in real time. Blue pulsing markers are in-transit, green means arriving soon."
-</blockquote>
-<div class="stage">Open browser — show map with live moving markers</div>
+<h2>Step 2 — Operator view (1.5 min)</h2>
+<div class="stage">Browser: CloudFront URL → <code>/app</code></div>
+<blockquote>"This is the operator's control tower: live map, exceptions, on-time rate. Trucks move every few seconds; that's the full AWS pipeline, not a mock."</blockquote>
 
-<h2>Step 3 — Click a Shipment</h2>
-<blockquote>
-  "I'll click on a marker. You get full details — the route, current speed, cargo type, progress percentage, and ETA in minutes. This all comes live from DynamoDB via the API."
-</blockquote>
-<div class="stage">Click a marker — show popup with shipment details</div>
+<h2>Step 3 — Latency proof (1 min)</h2>
+<div class="stage"><code>/app/system</code> → ingest latency p50 / p95</div>
+<blockquote>"Every message is timestamped when it's sent and when it's written. Median 0.8 seconds, p95 3.3 seconds. With the 2-second poll, a typical update is on screen in under 2 seconds; only the slowest 5 % get close to the 5-second limit. And my first run was at 9 seconds: the logs showed messages sitting 10 seconds in the queue, not in my code. One setting, the batching window, brought that down to 0.3."</blockquote>
 
-<h2>Step 4 — Trigger a Delay</h2>
-<blockquote>
-  "Now I'll simulate a delay for SHIP-002."
-</blockquote>
-<div class="stage">Run in terminal: python simulator.py --delay SHIP-002</div>
-<blockquote>
-  "The marker switches to red — status changes to DELAYED — and the ETA increases. No manual refresh, this updates automatically."
-</blockquote>
+<h2>Step 4 — Status update (2 min)</h2>
+<div class="stage">Open any in-transit shipment → <strong>Flag shipment</strong> → paste operator API key → status DELAYED</div>
+<blockquote>"Writes need the API key; it's never bundled in the website. The next GPS ping doesn't reset the flag: telemetry never overwrites operator fields."</blockquote>
+<div class="stage">Click <strong>Share tracking link</strong> → open <code>/track/&lt;id&gt;</code> in a private window</div>
+<blockquote>"And this is what the customer sees, instead of calling."</blockquote>
 
-<h2>Step 5 — Show the CDK Stack</h2>
-<blockquote>
-  "Quick look at the infrastructure code. This entire AWS setup — IoT Core, Kinesis, two Lambdas, DynamoDB, API Gateway — is defined in roughly 100 lines of Python CDK. One cdk deploy command builds everything from scratch. Fully reproducible, no manual console clicking."
-</blockquote>
-<div class="stage">Show CDK stack file briefly in editor</div>
+<h2>Step 5 — Resilience (1.5 min)</h2>
+<div class="stage">Terminal (prepared beforehand):<br>
+<code>aws iot-data publish --endpoint-url https://$(aws iot describe-endpoint --endpoint-type iot:Data-ATS --query endpointAddress --output text) --topic shipments/DEMO-BAD/location --cli-binary-format raw-in-base64-out --payload '{"shipmentId":"DEMO-BAD","seq":0}'</code></div>
+<blockquote>"A broken message: invalid sequence number. It goes through IoT and the ingest queue, the Lambda rejects it, and it lands in the dead-letter queue. The alarm emails me, and the trucks on the map keep moving."</blockquote>
+<div class="stage">SQS console → <code>shipment-process-event-dlq-dev</code> → Poll for messages → show the reason field</div>
+
+<h2>Step 6 — Cost (1 min)</h2>
+<div class="stage">Cost Explorer → filter by service, last N days. Then Budgets → <code>shipment-tracker-dev</code></div>
+<blockquote>"The whole AWS run, 29,000 messages, comes to about 25 cents at list prices, and most of that is inside the free tier. The measured run used SQS, so the Kinesis shard, which would be the largest item at about 36 cents a day, isn't in this number."</blockquote>
+
+<h2>Step 7 — Infrastructure as code (30 sec)</h2>
+<div class="stage">Editor: <code>infrastructure/stack.py</code></div>
+<blockquote>"Everything you've seen is one CDK stack: one command to deploy, one to destroy."</blockquote>
 
 <div class="part">
   PART 3 — Q&amp;A Preparation
-  <span class="duration">~5 minutes</span>
+  <span class="duration">5 minutes</span>
 </div>
 
 <div class="qa">
   <div class="question">Why Kinesis and not SQS?</div>
-  <div class="answer">SQS delivers each message once and deletes it. Kinesis is a stream — ordered, replayable, supports multiple consumers reading independently. For continuous GPS data at scale, Kinesis is the right tool.</div>
+  <div class="answer">SQS deletes a message once it's consumed and only orders in FIFO mode, which caps throughput. Kinesis keeps order per partition key (= shipment) and lets me replay 24 hours. Cost: 1 provisioned shard ≈ $0.36/day.</div>
 </div>
 
 <div class="qa">
-  <div class="question">Why not WebSockets instead of polling?</div>
-  <div class="answer">WebSockets would be the production upgrade — AWS API Gateway supports WebSocket APIs natively. For this PoC, polling every 5 seconds is sufficient for GPS update frequency and much simpler to implement. I'd switch for production.</div>
+  <div class="question">But your live run used SQS. Doesn't that contradict the design?</div>
+  <div class="answer">The Free plan doesn't include Kinesis, so I made ingestion switchable (<code>-c ingest=sqs</code>) instead of rewriting it. The same Lambda handles both. Ordering isn't needed, because the seq-conditioned write gives the same final state in any order (tested with reordering). What SQS can't do is replay 24 h after a bad deploy, and that's why production stays on Kinesis.</div>
 </div>
 
 <div class="qa">
-  <div class="question">What happens if Lambda crashes?</div>
-  <div class="answer">Kinesis retains events for up to 7 days and retries failed Lambda batches automatically. No data is lost — it's built into the Kinesis-Lambda integration.</div>
+  <div class="question">Why provisioned and not On-Demand Kinesis?</div>
+  <div class="answer">On-Demand has a higher per-hour base price per stream. At 40 trucks one shard has &gt; 99 % headroom, so provisioned is cheaper. On-Demand is right when traffic is unpredictable and large.</div>
 </div>
 
 <div class="qa">
-  <div class="question">Could this scale to 5,000 trucks?</div>
-  <div class="answer">Yes, without architecture changes. Kinesis On-Demand handles ingestion scaling, Lambda scales per shard, DynamoDB On-Demand scales automatically. The architecture is designed for this.</div>
+  <div class="question">Where is the ETA calculated?</div>
+  <div class="answer">On the telematics unit (the simulator), like real telematics boxes that know the driver's hours. The backend validates and stores it, and records the ETA at half-way to measure accuracy. Production: Amazon Location Service for routes.</div>
 </div>
 
 <div class="qa">
-  <div class="question">Why DynamoDB over Timestream?</div>
-  <div class="answer">Timestream would be better for querying historical routes. My requirement is only the current state of each shipment — no history queries needed. DynamoDB is cheaper and simpler for this access pattern.</div>
+  <div class="question">What happens if the Lambda crashes or has a bug?</div>
+  <div class="answer">Transient errors: the batch reports the failed record, Lambda retries from there (3×, batch is bisected). Poison messages: straight to the DLQ. A deployed bug: fix it and Kinesis still holds 24 h of data to replay. Messages older than 1 h are not retried; stale GPS is useless.</div>
+</div>
+
+<div class="qa">
+  <div class="question">Could this scale to 10,000 trucks?</div>
+  <div class="answer">Ingest yes: ~17,000 trucks per shard at 30 s, add shards, one Lambda per shard. Writes yes: one partition key per shipment. Reads no, not as is: the list API scans the table on each poll. Fix: sparse GSI on active shipments, short caching, and push via DynamoDB Streams → WebSocket.</div>
+</div>
+
+<div class="qa">
+  <div class="question">Why polling and not WebSockets?</div>
+  <div class="answer">Polling every 2 s already meets the 5 s target. WebSockets need a connection table, connect/disconnect handlers and fan-out. That's the upgrade once there are many concurrent viewers.</div>
+</div>
+
+<div class="qa">
+  <div class="question">How do you stop one customer seeing another's shipments?</div>
+  <div class="answer">In the PoC the customer filter is a query parameter, so not secure. Production: Cognito, customer ID taken from the token in the Lambda, never from the request. That's on my "Known gap" slide.</div>
+</div>
+
+<div class="qa">
+  <div class="question">Why DynamoDB and not RDS or Timestream?</div>
+  <div class="answer">Access is by key: current state by shipment ID, timeline by shipment ID + time (sort key). No joins, no idle cost, no connection pool from Lambda. Timestream would suit raw GPS analytics; I only keep milestones.</div>
+</div>
+
+<div class="qa">
+  <div class="question">How do you know the cost before the bill?</div>
+  <div class="answer">Per-day model on the cost slide, the Budget alerts, and Cost Explorer. The one fixed cost is the shard; everything else scales with messages and with open dashboards.</div>
+</div>
+
+<div class="qa">
+  <div class="question">What would you do differently?</div>
+  <div class="answer">Measure on AWS earlier. Design the read path (GSI) together with the write path, not after. And move auth to Cognito from the start, because retrofitting tenancy is harder than building it in.</div>
 </div>
 
 <hr/>
@@ -338,22 +359,18 @@
 <h2>Timing Summary</h2>
 <table>
   <thead>
-    <tr><th>Section</th><th>Content</th><th>Time</th></tr>
+    <tr><th>Section</th><th>Slides</th><th>Time</th></tr>
   </thead>
   <tbody>
-    <tr><td>Opening + Use Case</td><td>Problem statement</td><td>2 min</td></tr>
-    <tr><td>Architecture</td><td>Service-by-service with justifications</td><td>5 min</td></tr>
-    <tr><td>Well-Architected</td><td>Cost Optimization + Security</td><td>1.5 min</td></tr>
-    <tr><td>Live Demo</td><td>Simulator → Dashboard → Delay → CDK</td><td>8 min</td></tr>
-    <tr><td>Q&amp;A</td><td>Short questions from audience</td><td>~5 min</td></tr>
-    <tr><td>Total</td><td></td><td>~22 min</td></tr>
+    <tr><td>Opening, problem, scorecard</td><td>1–3</td><td>2.5 min</td></tr>
+    <tr><td>Architecture &amp; choices</td><td>4–8</td><td>6 min</td></tr>
+    <tr><td>Pillars: Reliability, Security, Cost</td><td>9–13</td><td>4 min</td></tr>
+    <tr><td>Live demo</td><td>14</td><td>8 min</td></tr>
+    <tr><td>Trade-offs, summary</td><td>15–16</td><td>1 min</td></tr>
+    <tr><td>Q&amp;A</td><td></td><td>5 min</td></tr>
+    <tr class="total"><td>Total</td><td></td><td>≈ 21.5 min + 5 min Q&amp;A</td></tr>
   </tbody>
 </table>
-
-<div class="tip">
-  <strong>Tip for your slot (12:00)</strong>
-  You're the last solo presenter — the audience will have been sitting for 3 hours. Keep energy up during the demo. The live map with real-time marker updates always lands well with an audience.
-</div>
 
 </body>
 </html>
