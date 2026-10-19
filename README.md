@@ -46,15 +46,30 @@ Tear down afterwards with `python scripts/provision_device.py --revoke` and `cdk
 
 ## Repository
 
-| Folder | Contents |
-|---|---|
-| `lambda/` | Ingestion (`process_event`), read API and metrics (`api`), operator flag (`update_shipment`) |
-| `infrastructure/` | AWS CDK stack: IoT Core, Kinesis, Lambda, DynamoDB, API Gateway, CloudFront, alarms |
-| `simulator/` | Fleet simulation engine and MQTT publisher |
-| `dashboard/` | React web app: operator view, customer portal, public tracking (+ JS port of the engine for the demo) |
-| `evaluation/`, `report/` | Experiments and the generated technical report |
-| `shared/` | Road network (37 hubs, 156 lanes), fictional catalog, simulation parameters |
-| `docs/` | [AWS services explained](docs/AWS_SERVICES.md) |
+In the order the data flows: truck → AWS → browser.
+
+```
+simulator/            1. The trucks
+  engine.py             fleet simulation: routes, driving-time rules, ETA
+  simulator.py          publishes one GPS message per truck over MQTT to IoT Core
+infrastructure/       2. Everything on AWS, as one CDK stack
+  stack.py              IoT rule, Kinesis/SQS, Lambdas, DynamoDB, API Gateway, S3 + CloudFront, alarms, budget
+  app.py                entry point and flags (-c ingest=sqs, -c alertEmail=…)
+lambda/               3. Code that runs in AWS
+  process_event/        stream → validate, idempotent write (seq), DLQ for bad messages
+  api/                  GET /shipments, /shipments/{id}, /metrics for the dashboard
+  update_shipment/      PUT: operator flag (API key)
+dashboard/            4. React web app on S3 + CloudFront
+  src/pages/            operator views, customer portal, public tracking page
+  src/lib/api.js        talks to API Gateway, or to the in-browser mock without AWS
+  src/sim/              JS port of the simulator for the mock mode
+shared/               road network (37 hubs, 156 lanes), fictional catalog, parameters, used by 1 and 4
+scripts/              provision_device.py (IoT certificate), reset_demo.py, build_*.py (shared data)
+tests/                Lambda, simulator and stack tests (pytest)
+presentation/         slides.html and speaker_script.html for the course presentation
+evaluation/, report/  experiments and the generated technical report
+docs/                 AWS services explained (AWS_SERVICES.md), screenshots
+```
 
 Road geometry © OpenStreetMap contributors (ODbL) via OSRM; country boundaries © Natural Earth; map tiles © OpenFreeMap.
 All companies, people and shipments in the demo are fictional.
