@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Download, Search, Thermometer, PackageSearch } from 'lucide-react';
 import { api } from '../lib/api';
 import { usePoll, useSession } from '../lib/session';
@@ -12,7 +12,8 @@ export default function Shipments() {
   const navigate = useNavigate();
   const [scope, setScope] = useState('active');
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('');
+  const [searchParams] = useSearchParams();
+  const [status, setStatus] = useState(() => (STATUS[searchParams.get('status')] ? searchParams.get('status') : ''));
   const [customer, setCustomer] = useState('');
   const [onlyExceptions, setOnlyExceptions] = useState(false);
 
@@ -24,7 +25,7 @@ export default function Shipments() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (data?.shipments || [])
-      .filter((s) => !status || s.status === status)
+      .filter((s) => !status || scope === 'history' || s.status === status)   // the state filter is hidden in history
       .filter((s) => !onlyExceptions || s.exceptions.length || s.onTime === false)
       .filter((s) => !q || [s.shipmentId, s.orderRef, s.cmrNo, s.routeLabel, s.customerName, s.consignee?.name, s.plate, s.cargo?.type].some((v) => v?.toLowerCase().includes(q)))
       .sort((a, b) => scope === 'history' ? 0 : (a.status === 'DELIVERED') - (b.status === 'DELIVERED'));

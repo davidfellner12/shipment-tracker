@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
-import { Snowflake, Box } from 'lucide-react';
+import { Snowflake, Box, Download } from 'lucide-react';
 import { api } from '../lib/api';
 import { usePoll } from '../lib/session';
 import { FUEL, HUBS, country, duration } from '../lib/format';
+import { downloadCsv } from '../lib/export';
 import { catalog, params } from '../sim/engine.js';
 import { PageHeader, Pill, StatusPill } from '../components/ui';
 
@@ -32,7 +33,14 @@ export default function Fleet() {
 
   return (
     <>
-      <PageHeader title="Fleet" subtitle={`${catalog.vehicles.length} trucks · ${onRoad} on a job · ${zeroEmission} low-carbon (BEV / HVO)`} />
+      <PageHeader title="Fleet" subtitle={`${catalog.vehicles.length} trucks · ${onRoad} on a job · ${zeroEmission} low-carbon (BEV / HVO)`}>
+        <button className="btn-outline" onClick={() => downloadCsv('fleet.csv', rows, [
+          [(r) => r.v.plate, 'Vehicle'], [(r) => r.v.model, 'Model'], [(r) => FUEL[r.v.fuel], 'Powertrain'],
+          [(r) => (r.v.reefer ? 'Reefer' : 'Dry van'), 'Trailer'], [(r) => catalog.drivers[r.v.driver].name, 'Driver'],
+          [(r) => r.current?.status || 'AVAILABLE', 'State'], [(r) => r.current?.shipmentId, 'Shipment'], [(r) => r.current?.routeLabel, 'Lane'],
+          [(r) => (r.current ? hos.maxDailyDrivingMin - (r.current.driving?.todayMin || 0) : ''), 'Driving left today (min)'],
+        ])}><Download size={15} /> Export CSV</button>
+      </PageHeader>
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[980px] text-sm">
           <thead>

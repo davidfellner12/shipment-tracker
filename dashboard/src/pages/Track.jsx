@@ -2,7 +2,7 @@
 // internal data (driver, costs, telematics details).
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { PackageSearch, Search } from 'lucide-react';
+import { Download, PackageSearch, Search } from 'lucide-react';
 import { api } from '../lib/api';
 import { usePoll } from '../lib/session';
 import { CARRIER, dateTime, delayText, num, country, ago } from '../lib/format';
@@ -10,6 +10,7 @@ import { Empty, Progress, StatusPill, cx } from '../components/ui';
 import FleetMap from '../components/FleetMap';
 import { Logo, ThemeToggle } from '../components/AppShell';
 import { Timeline } from './ShipmentDetail';
+import { openDocument } from '../lib/documents';
 
 export default function Track() {
   const { id } = useParams();
@@ -46,6 +47,7 @@ export default function Track() {
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusPill status={s.status} />
               <span className={cx('text-sm', s.delayMin > 0 ? 'text-critical' : 'text-good')}>{delayText(s.delayMin)} vs. the agreed time</span>
+              {done && s.pod && <button className="btn-outline ml-auto !h-8 text-xs" onClick={() => openDocument(s, 'Proof of delivery')}><Download size={14} /> Proof of delivery</button>}
             </div>
 
             <div className="card mt-6 p-5">

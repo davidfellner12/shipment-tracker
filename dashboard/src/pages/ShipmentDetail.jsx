@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, Flag, Link2, Thermometer, Leaf, Truck, Package, Timer, MapPin, PackageSearch, FileText, ArrowRight, FileCheck2, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, Check, Flag, Link2, Thermometer, Leaf, Truck, Package, Timer, MapPin, PackageSearch, FileText, ArrowRight, FileCheck2, TriangleAlert, Download, ExternalLink } from 'lucide-react';
 import { api } from '../lib/api';
+import { openDocument } from '../lib/documents';
+import { downloadCsv, EVENT_COLUMNS } from '../lib/export';
 import { usePoll, useSession } from '../lib/session';
 import { CUSTOMER_EVENTS, FUEL, ago, country, dateTime, delayText, duration, eur, eventText, num } from '../lib/format';
 import { params } from '../sim/engine.js';
@@ -145,7 +147,9 @@ export default function ShipmentDetail() {
         <div className="card relative h-[420px] overflow-hidden">
           <FleetMap shipments={[s]} selectedId={s.shipmentId} fit="selected" showLanes={false} className="absolute inset-0" />
         </div>
-        <Card title="Milestones" subtitle={isOperator ? 'Full telematics timeline' : 'Shipment progress'} bodyClass="max-h-[356px] overflow-y-auto">
+        <Card title="Milestones" subtitle={isOperator ? 'Full telematics timeline' : 'Shipment progress'} bodyClass="max-h-[356px] overflow-y-auto"
+          action={<button className="btn-ghost !h-8 !px-2 text-xs" title="Download timeline as CSV"
+            onClick={() => downloadCsv(`${s.shipmentId}-timeline.csv`, [...(data.events || [])].reverse(), EVENT_COLUMNS)}><Download size={14} /> CSV</button>}>
           <Timeline events={data.events || []} customerView={!isOperator} />
         </Card>
       </div>
@@ -202,11 +206,19 @@ export default function ShipmentDetail() {
         <Card title="Documents" subtitle="Attached to this shipment" action={<FileText size={16} className="text-ink-3" />}>
           <ul className="divide-y divide-line">
             {(s.documents || []).map((d) => (
-              <li key={d} className="flex items-center gap-2.5 py-2 text-sm text-ink-2"><FileText size={14} className="shrink-0 text-ink-3" />{d}</li>
+              <li key={d}>
+                <button className="group flex w-full items-center gap-2.5 py-2 text-left text-sm text-ink-2 hover:text-accent"
+                  onClick={() => openDocument(s, d, data.events || [])}>
+                  <FileText size={14} className="shrink-0 text-ink-3 group-hover:text-accent" />{d}
+                  <ExternalLink size={13} className="ml-auto shrink-0 text-ink-3 opacity-0 group-hover:opacity-100" />
+                </button>
+              </li>
             ))}
           </ul>
         </Card>
-        <Card title="Proof of delivery" action={<FileCheck2 size={16} className="text-ink-3" />}>
+        <Card title="Proof of delivery" action={s.pod
+          ? <button className="btn-ghost !h-8 !px-2 text-xs" onClick={() => openDocument(s, 'Proof of delivery')}><Download size={14} /> POD</button>
+          : <FileCheck2 size={16} className="text-ink-3" />}>
           {s.pod ? (
             <div className="grid grid-cols-2 gap-4">
               <Field label="Signed by">{s.pod.signedBy}</Field>

@@ -17,6 +17,16 @@ function RateBar({ value }) {
   );
 }
 
+function CsvButton({ name, rows, first, showCost }) {
+  const columns = [['label', first], ['shipments', 'Shipments'], ['onTimeRate', 'On-time rate'], ['avgTransitHours', 'Avg transit (h)'],
+    ['gCo2ePerTkm', 'g CO2e/tkm'], ...(showCost ? [['costEur', 'Energy + tolls (EUR)']] : [])];
+  return (
+    <button className="btn-ghost !h-8 !px-2 text-xs" disabled={!rows?.length} onClick={() => downloadCsv(name, rows, columns)}>
+      <Download size={14} /> CSV
+    </button>
+  );
+}
+
 function BreakdownTable({ rows, first, showCost }) {
   return (
     <div className="overflow-x-auto">
@@ -105,7 +115,7 @@ export default function Analytics() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_380px]">
-        <Card title="Lanes" subtitle="Top lanes by volume">
+        <Card title="Lanes" subtitle="Top lanes by volume" action={<CsvButton name={`lanes-${days}d.csv`} rows={m?.lanes} first="Lane" showCost={isOperator} />}>
           <BreakdownTable rows={m?.lanes || []} first="Lane" showCost={isOperator} />
         </Card>
         <Card title="Emission intensity by powertrain" subtitle="g CO₂e per tonne-km">
@@ -115,7 +125,8 @@ export default function Analytics() {
       </div>
 
       {isOperator && (
-        <Card title="Customers" subtitle="Service level per account" className="mt-4">
+        <Card title="Customers" subtitle="Service level per account" className="mt-4"
+          action={<CsvButton name={`customers-${days}d.csv`} rows={m?.customers} first="Customer" showCost />}>
           <BreakdownTable rows={m?.customers || []} first="Customer" showCost />
         </Card>
       )}

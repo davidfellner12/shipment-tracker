@@ -78,8 +78,10 @@ export default function Overview() {
               const share = active.length ? n / active.length : 0;
               return (
                 <li key={key} className="text-sm">
-                  <div className="flex justify-between text-ink-2"><span>{s.label}</span><span className="tabular-nums text-ink">{n}</span></div>
-                  <div className="mt-1 h-1.5 rounded-full bg-subtle"><div className="h-full rounded-full bg-series-1" style={{ width: `${share * 100}%` }} /></div>
+                  <Link to={`/app/shipments?status=${key}`} className="group block">
+                    <div className="flex justify-between text-ink-2 group-hover:text-accent"><span>{s.label}</span><span className="tabular-nums text-ink">{n}</span></div>
+                    <div className="mt-1 h-1.5 rounded-full bg-subtle"><div className="h-full rounded-full bg-series-1" style={{ width: `${share * 100}%` }} /></div>
+                  </Link>
                 </li>
               );
             })}

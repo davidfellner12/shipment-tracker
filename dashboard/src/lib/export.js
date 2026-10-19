@@ -1,3 +1,5 @@
+import { eventText } from './format';
+
 // CSV export (UTF-8 with BOM so Excel detects the encoding; RFC 4180 quoting)
 export function downloadCsv(filename, rows, columns) {
   const esc = (v) => {
@@ -12,6 +14,14 @@ export function downloadCsv(filename, rows, columns) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+
+export const EVENT_COLUMNS = [
+  ['at', 'Time (UTC)'],
+  ['type', 'Event'],
+  [(e) => eventText(e).title, 'Description'],
+  [(e) => eventText(e).detail, 'Detail'],
+  ['country', 'Country'],
+];
 
 export const SHIPMENT_COLUMNS = [
   ['shipmentId', 'Shipment'],
