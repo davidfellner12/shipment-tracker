@@ -1,13 +1,14 @@
 // /app/fleet — operator only: every truck with its current job, driver hours left
 // (EU 561/2006) and last delivery. Joins the static catalog with the live shipment list.
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Snowflake, Box, Download } from 'lucide-react';
+import { Snowflake, Box, Download, Search, Truck } from 'lucide-react';
 import { api } from '../lib/api';
 import { usePoll } from '../lib/session';
 import { FUEL, HUBS, country, duration } from '../lib/format';
 import { downloadCsv } from '../lib/export';
 import { catalog, params } from '../sim/engine.js';
-import { PageHeader, Pill, StatusPill } from '../components/ui';
+import { Empty, PageHeader, Pill, StatusPill } from '../components/ui';
 
 function HoursBar({ used, max }) {
   const left = Math.max(0, max - used), share = left / max;
@@ -21,16 +22,21 @@ function HoursBar({ used, max }) {
 
 export default function Fleet() {
   const { data } = usePoll(() => api.listShipments({}), [], 3000);
+  const [query, setQuery] = useState('');
   const shipments = data?.shipments || [];
   const hos = params.hos;
 
-  const rows = catalog.vehicles.map((v) => {
+  const allRows = catalog.vehicles.map((v) => {
     const mine = shipments.filter((s) => s.vehicleId === v.id);
     const current = mine.find((s) => s.status !== 'DELIVERED');
     const last = mine.filter((s) => s.status === 'DELIVERED').sort((a, b) => (b.deliveredAt || '').localeCompare(a.deliveredAt || ''))[0];
-    return { v, current, last };
+    const location = current ? country(current.country) : last ? `${HUBS[last.destination]?.name} (hub)` : `${HUBS[v.home]?.name} (home)`;
+    return { v, current, last, location };
   });
-  const onRoad = rows.filter((r) => r.current).length;
+  const q = query.trim().toLowerCase();
+  const rows = allRows.filter(({ v, current, location }) => !q || [v.plate, v.model, FUEL[v.fuel], catalog.drivers[v.driver].name,
+    current?.shipmentId, current?.routeLabel, location].some((s) => s?.toLowerCase().includes(q)));
+  const onRoad = allRows.filter((r) => r.current).length;
   const zeroEmission = catalog.vehicles.filter((v) => v.fuel === 'ELECTRIC' || v.fuel === 'HVO').length;
 
   return (
@@ -43,6 +49,13 @@ export default function Fleet() {
           [(r) => (r.current ? hos.maxDailyDrivingMin - (r.current.driving?.todayMin || 0) : ''), 'Driving left today (min)'],
         ])}><Download size={15} /> Export CSV</button>
       </PageHeader>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
+          <input className="input w-64 pl-9" placeholder="Search plate, driver, shipment, lane…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+        <span className="ml-auto text-xs text-ink-3">{rows.length} trucks</span>
+      </div>
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[980px] text-sm">
           <thead>
@@ -52,7 +65,7 @@ export default function Fleet() {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {rows.map(({ v, current, last }) => (
+            {rows.map(({ v, current, location }) => (
               <tr key={v.id}>
                 <td className="px-4 py-3"><div className="font-medium text-ink">{v.plate}</div><div className="text-xs text-ink-3">{v.model}{v.year ? ` · ${v.year}` : ""}</div></td>
                 <td className="px-4 py-3 text-ink-2">{FUEL[v.fuel]}</td>
@@ -64,15 +77,14 @@ export default function Fleet() {
                     : <span className="text-ink-3">—</span>}
                   {current && <div className="text-xs text-ink-3">{current.routeLabel}</div>}
                 </td>
-                <td className="px-4 py-3 text-ink-2">
-                  {current ? country(current.country) : last ? `${HUBS[last.destination]?.name} (hub)` : `${HUBS[v.home]?.name} (home)`}
-                </td>
+                <td className="px-4 py-3 text-ink-2">{location}</td>
                 <td className="px-4 py-3">{current ? <HoursBar used={current.driving?.todayMin || 0} max={hos.maxDailyDrivingMin} /> : <span className="text-ink-3">—</span>}</td>
                 <td className="px-4 py-3">{current ? <HoursBar used={current.driving?.sinceBreakMin || 0} max={hos.maxContinuousDrivingMin} /> : <span className="text-ink-3">—</span>}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        {!rows.length && <Empty icon={Truck} title="No trucks match">Try a different plate, driver or shipment ID.</Empty>}
       </div>
       <p className="mt-3 text-xs text-ink-3">Driving hours come from the tachograph feed (EU 561/2006: 4.5 h before a 45 min break, 9 h per day).</p>
     </>

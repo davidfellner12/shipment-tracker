@@ -3,6 +3,10 @@
 This explains every AWS service in the Shipment Tracker: what it does in general,
 what it does **in this project**, and the trade-offs behind the choice.
 
+The deployed stack uses **Amazon SQS** as the ingest buffer (`cdk deploy -c ingest=sqs`), because the
+AWS Free plan does not include Kinesis. The same stack can deploy **Kinesis** instead (no flag); the
+`process_event` Lambda handles both. Section ② explains the choice.
+
 ```
  Truck (simulator.py)
    │  MQTT over TLS, X.509 client certificate
@@ -10,11 +14,11 @@ what it does **in this project**, and the trade-offs behind the choice.
  ① AWS IoT Core ──(rule: SELECT * FROM 'shipments/+/location')──┐
    │                                                           │ on error
    ▼                                                           ▼
- ② Amazon Kinesis Data Streams                          ⑥ Amazon SQS (DLQ)
-   │  batch of ≤100 records, ≤1 s window                       ▲
-   ▼                                                           │ invalid / failed
+ ② Amazon SQS  ingest queue ───(after 4 failed receives)──► ⑥ Amazon SQS (DLQ)
+   │  batch of ≤10 messages, no batching window                ▲
+   ▼                                                           │ invalid
  ③ AWS Lambda  process_event ──────────────────────────────────┘
-   │  conditional UpdateItem (only if newer timestamp)
+   │  conditional UpdateItem (only if newer seq)
    ▼
  ④ Amazon DynamoDB  Shipments (state) + ShipmentEvents (timeline)
    ▲
@@ -48,38 +52,56 @@ SQL over incoming messages and forwards them to other AWS services.
 - **Device policy** (`SimulatorDevicePolicy`): the certificate may **only** connect as
   `shipment-simulator-*` and **only** publish to `shipments/*/location`. A stolen
   certificate can't read data or publish to other topics.
-- **Topic rule** `shipment_location_to_kinesis`: forwards every message to Kinesis,
-  with partition key = shipment ID from the topic. If the Kinesis write fails, the
-  rule's **error action** sends the message to the SQS DLQ, so nothing is lost silently.
+- **Topic rule** `shipment_location_to_sqs_<stage>`: forwards every message to the SQS
+  ingest queue (in the Kinesis variant: `shipment_location_to_kinesis_<stage>`, partition key =
+  shipment ID). If that write fails, the rule's **error action** sends the message to the
+  DLQ, so nothing is lost silently.
 
 **Why not HTTP to API Gateway?** MQTT is built for devices on flaky networks. It has a
 small overhead, a persistent connection, QoS 1 delivery guarantees, and certificate
 authentication. Real telematics boxes speak MQTT.
 
-**Cost:** ~$1 per million messages + connection minutes. At 40 trucks × 1 msg/30 s that's
-~115k messages/day ≈ $0.12/day; in fast demo mode (every 3 s) ≈ $1.15/day.
+**Cost (Frankfurt list prices):** $1.20 per million messages + $0.18 per million rules triggered
++ $0.18 per million actions ≈ $1.56 per million. At 40 trucks × 1 msg/30 s that's ~115k
+messages/day ≈ $0.18/day; in fast demo mode (every 3 s) ≈ $1.80/day.
 
 ---
 
-## ② Amazon Kinesis Data Streams — event buffer
+## ② Amazon SQS — ingest queue (buffer between IoT Core and Lambda)
 
-**In general:** An ordered, replayable log of records, split into **shards** (each
-1 MB/s or 1,000 records/s in). Consumers read at their own pace. Records are kept
-for 24 h to 365 days.
+**In general:** A fully managed message queue. Producers send messages, consumers receive
+and then delete them. A standard queue has practically unlimited throughput, delivers
+*at least once* and does not guarantee order.
 
-**Here:** 1 shard, 24 h retention, encrypted with KMS.
+**Here:** queue `shipment-location-ingest-<stage>`, encrypted (SQS-managed key), TLS enforced.
 
-**Why put it between IoT and Lambda?**
-| Benefit | Meaning for us |
-|---|---|
-| Buffering | A burst of pings doesn't overload Lambda/DynamoDB; Lambda drains it in batches |
-| Ordering | Same shipment → same partition key → same shard → processed in order |
-| Replay | Fix a bug in the Lambda and re-read the last 24 h of events |
-| Fan-out | An analytics consumer (Firehose → S3 → Athena) can be added without touching the pipeline |
+| Setting | Value | Why |
+|---|---|---|
+| Lambda batch size | 10, **no batching window** | with a 1 s window, messages waited ~10 s in the queue (measured: p50 9.3 s); without it ~0.3 s |
+| Visibility timeout | 180 s | 6 × the Lambda timeout, so a message is not handed out twice while it's being processed |
+| Redrive policy | 4 receives → DLQ | a message that keeps failing ends up in the DLQ instead of looping forever |
+| Retention | 24 h | stale GPS is useless after a day |
 
-**Trade-off:** a shard costs ~$0.015/h (~$11/month) even when idle. **This is the
-biggest line item, so run `cdk destroy` after the demo.** On-demand mode would scale
-automatically but has a higher baseline cost.
+**Why a queue between IoT Core and Lambda at all?** IoT rules can invoke Lambda directly,
+but then there is no buffer. Measured on AWS:
+- The 30-day backfill peaked at **4,660 messages/min** with 0 errors.
+- This account allows only **10 concurrent Lambda executions**. 2,515 deliveries were
+  throttled; SQS kept them and redelivered them. **Nothing was lost**, the DLQ stayed at 0.
+
+**Why SQS and not Kinesis (the design in the 1-pager)?**
+
+| | SQS standard (deployed) | Kinesis, 1 provisioned shard |
+|---|---|---|
+| Idle cost | $0, billed per request ($0.40 per million) | $0.018/shard-hour = **$0.43/day**, also when idle |
+| Order per truck | no — not needed: the `seq` check makes the result order-independent (tested) | yes (partition key = shipment) |
+| Replay after a bad deploy | no — only what landed in the DLQ | 24 h |
+| Several consumers | no (one queue, one reader) | yes (e.g. Firehose → S3 → Athena) |
+| Capacity | no practical limit; Lambda scales to 1,250 concurrent readers | 1 MB/s per shard ≈ 17,000 trucks at 30 s |
+| AWS Free plan | yes | no |
+
+**Decision:** SQS for this workload. Switch to Kinesis (deploy without `-c ingest=sqs`) once
+replay or a second consumer is needed. The Lambda code stays the same; in that variant the
+event source uses batches of 100, a 1 s window, bisect-on-error, 3 retries and a 1 h max record age.
 
 ---
 
@@ -92,26 +114,31 @@ per request and per GB-second of runtime. It scales automatically.
 
 | Function | Trigger | Job |
 |---|---|---|
-| `process_event` | Kinesis (event source mapping) | Validate telemetry → append milestones to the events table → upsert the shipment's current state |
+| `process_event` | SQS ingest queue (event source mapping) | Validate telemetry → append milestones to the events table → upsert the shipment's current state |
 | `api` | API Gateway `GET` | Live board, shipment detail + timeline, and `/metrics` (on-time %, ETA accuracy, CO₂e, lanes, customers) |
 | `update_shipment` | API Gateway `PUT` | Set or clear the operator's manual delay flag |
 
 **Production-grade details in `process_event`:**
 - **Idempotency:** every message has a per-shipment sequence number, and writes use
-  `ConditionExpression: seq < :new_seq`. Duplicates (MQTT QoS 1 is "at least once") and
-  out-of-order messages are skipped. Event rows are keyed by their own time and sequence, so a replay just overwrites them.
-- **Partial batch failures:** the handler returns `batchItemFailures`, so Lambda
-  retries only from the failing record instead of the whole batch.
-- **Bisect on error + 3 retries + max record age 1 h:** a bad record can't block the
-  shard forever. After the retries, the batch metadata goes to the DLQ.
+  `ConditionExpression: seq < :new_seq`. Duplicates (MQTT QoS 1 and SQS are both "at least
+  once") and out-of-order messages (a standard queue doesn't keep order) are skipped. Event rows are keyed by their own time and sequence, so a replay just overwrites them.
+- **Partial batch failures:** the handler returns `batchItemFailures`, so only the failed
+  messages go back to the queue; the rest of the batch is deleted.
+- **Retries:** a failed message becomes visible again after the 180 s visibility timeout;
+  after 4 receives the queue moves it to the DLQ. (Kinesis variant: bisect on error, 3 retries,
+  max record age 1 h.)
 - **Poison records** (invalid JSON, bad coordinates) go straight to the DLQ.
   Retrying them would never help.
 - **Ownership split:** it uses `UpdateItem` on telemetry fields only, so an operator's
   flag isn't wiped by the next GPS ping.
-- **ETA accuracy capture:** the ETA seen when a truck passes halfway is stored once
-  (`if_not_exists`). The metrics compare it with the real delivery time.
+- **ETA accuracy capture:** the ETA seen when a truck passes halfway (50–65 % of the route) is
+  stored with a conditional write where the **lowest `seq` wins**, so arrival order doesn't
+  matter. The metrics compare it with the real delivery time (see `docs/METRICS.md`).
 
-**Cost:** 1M requests free per month (free tier). The whole PoC stays well within that.
+**Cost:** ARM $0.20 per million requests + per GB-second; the free tier covers 1M requests and
+400,000 GB-s per month. Measured on this deployment: `process_event` handles ≈ 2 messages per
+invocation; the `api` function (512 MB, ~2 s per call because it scans the table) uses far more
+GB-seconds than ingestion.
 
 ---
 
@@ -170,12 +197,14 @@ Cognito** user pool authorizer, so each dispatcher logs in and actions are audit
 
 ## ⑥ Amazon SQS — dead-letter queue
 
-**In general:** A fully managed message queue.
+**In general:** A queue that holds messages that could not be processed, so they can be
+inspected and replayed instead of being lost.
 
-**Here:** one DLQ (14-day retention, encrypted, TLS enforced) that collects:
-1. IoT messages the rule couldn't put into Kinesis
-2. Invalid GPS payloads rejected by `process_event`
-3. Kinesis batch pointers whose retries were exhausted
+**Here:** `shipment-process-event-dlq-<stage>` (14-day retention, encrypted, TLS enforced) collects:
+1. IoT messages the rule couldn't put into the ingest queue (rule error action)
+2. Invalid GPS payloads rejected by `process_event`, with the reason (e.g. `missing/invalid seq`)
+3. Messages that failed 4 times (redrive policy of the ingest queue);
+   in the Kinesis variant: batch pointers whose retries were exhausted
 
 A CloudWatch alarm fires as soon as the queue holds **one** message.
 
@@ -207,10 +236,10 @@ Every component gets its own role with only what it needs:
 
 | Principal | Allowed |
 |---|---|
-| `process_event` | `dynamodb:UpdateItem` on Shipments, `PutItem`/`BatchWriteItem` on ShipmentEvents, `sqs:SendMessage` to the DLQ, read the stream |
+| `process_event` | `dynamodb:UpdateItem` on Shipments, `PutItem`/`BatchWriteItem` on ShipmentEvents, `sqs:SendMessage` to the DLQ, receive/delete on the ingest queue |
 | `api` | `dynamodb:GetItem`, `Scan` on Shipments, `Query` on ShipmentEvents (read-only) |
 | `update_shipment` | `dynamodb:UpdateItem` only |
-| IoT rule role | `kinesis:PutRecord(s)` on this stream only |
+| IoT rule role | `sqs:SendMessage` on the ingest queue only (Kinesis variant: `kinesis:PutRecord(s)` on the stream) |
 | IoT error role | `sqs:SendMessage` on the DLQ only |
 | Device certificate | `iot:Connect` as `shipment-simulator-*`, `iot:Publish` to `shipments/*/location` |
 
@@ -227,9 +256,9 @@ No function has `*` permissions or can delete data.
   |---|---|
   | DLQ not empty | ≥1 message in the DLQ |
   | process_event errors | any Lambda error in 5 min |
-  | Stream lag | consumer > 30 s behind for 3 min (latency target broken) |
+  | Ingest lag | oldest message in the ingest queue > 30 s, for 3 min (latency target broken) |
   | API 5xx | ≥5 server errors in 5 min |
-- **Dashboard** `ShipmentTracker-<stage>`: incoming records, consumer lag, DLQ depth,
+- **Dashboard** `ShipmentTracker-<stage>`: messages into SQS, consumer lag (age of the oldest message), DLQ depth,
   Lambda errors, API p95 latency, 4xx/5xx. Good to show during the demo.
 - **X-Ray:** traces a request through API Gateway → Lambda → DynamoDB.
 
@@ -241,14 +270,24 @@ As recommended in lab 1: a monthly budget (default **$10**) that emails you at *
 and **80%** actual spend, and when **forecasted** spend exceeds 100%. It's created when
 you pass `-c alertEmail=…`. Budgets are account-wide, so they track your credits.
 
-**Expected PoC cost** (eu-central-1, a few hours of demo):
-| Item | Cost |
+A second, account-wide budget `project-budget` ($100, the course limit) alerts at 5 % and 50 %.
+
+**Cost per day** (eu-central-1 list prices, 40 trucks every 30 s = 115k messages):
+
+| Item | Cost / day |
 |---|---|
-| Kinesis shard | $0.015/h → ~$0.36/day deployed |
-| IoT messages | ~$0.12/day real time, ~$1.15/day in fast demo mode |
-| Lambda, DynamoDB, API GW, S3, CloudFront, SQS, SNS | free tier / cents |
+| DynamoDB writes (~2.7 write units per message, $0.7625 per million) | $0.24 |
+| IoT Core (message + rule + action) | $0.18 |
+| SQS (send + receive + delete, ~2 requests per message, $0.40 per million) | $0.10 |
+| Lambda, API Gateway, S3, CloudFront, SNS | ~$0.03 (mostly free tier) |
 | CloudWatch (4 alarms, 1 dashboard) | ~$0.10/alarm/month; the dashboard is within the free tier (3 per account) |
-| **Total for a 1-week PoC** | **≈ $3–5** |
+| **Pipeline total, no fixed cost** | **≈ $0.55** |
+| Each open dashboard tab (table scan every 2 s, $0.1525 per million reads) | ~$0.11 per hour |
+| *Kinesis variant: 1 shard* | *+ $0.43, also when idle* |
+
+**Measured:** first AWS run 29k messages ≈ $0.25; current deployment (from 19 Oct 2026) 48k messages,
+1.85 M read vs. 0.12 M write units ≈ $0.65, two-thirds of it dashboard reads. Billed: $0 (Free plan
+credits). Cost Explorer has no data for a new account, so these are CloudWatch usage × list prices.
 
 ---
 
@@ -273,10 +312,10 @@ update, or roll back all resources as one unit.
 |---|---|
 | **Operational excellence** | All IaC, CI (tests + synth), structured logs, dashboard, alarms |
 | **Security** | mTLS device certs, least-privilege IAM and IoT policy, API key on writes, request validation, CORS allow-list, encryption at rest and in transit, private S3 via OAC, no secrets in git |
-| **Reliability** | Kinesis buffering and replay, idempotent writes, partial-batch retries, bisect, DLQ + alarm, PITR in prod |
-| **Performance efficiency** | Serverless auto-scaling, batching (100 records / 1 s window), Graviton, CDN for the frontend |
-| **Cost optimization** | Pay per use everywhere except the shard; on-demand DynamoDB; TTL cleanup; Budgets alerts; one-command teardown |
-| **Sustainability** | Graviton (more perf/watt), no idle servers, 24 h retention instead of indefinite storage |
+| **Reliability** | SQS buffering and redelivery (2,515 throttled deliveries, 0 lost), idempotent writes, partial-batch retries, redrive → DLQ + alarm, PITR in prod; tested with injected faults (302/302) |
+| **Performance efficiency** | Serverless auto-scaling, batching (≤ 10 messages, no window → p50 0.83 s), Graviton, CDN for the frontend |
+| **Cost optimization** | Pay per use everywhere, nothing billed per hour; SQS instead of a Kinesis shard; on-demand DynamoDB; TTL cleanup; Budgets alerts; one-command teardown |
+| **Sustainability** | Graviton (more perf/watt), no idle servers or shards, 24 h queue retention, TTL instead of indefinite storage |
 
 ---
 

@@ -67,8 +67,9 @@ shared/               road network (37 hubs, 156 lanes), fictional catalog, para
 scripts/              provision_device.py (IoT certificate), reset_demo.py, build_*.py (shared data)
 tests/                Lambda, simulator, stack and demo-mode parity tests (pytest)
 presentation/         slides.html and speaker_script.html for the course presentation
+  demo-walkthrough/   annotated screenshots of the live demo, in demo order
 evaluation/, report/  experiments and the generated technical report
-docs/                 AWS services explained (AWS_SERVICES.md), screenshots
+docs/                 AWS services (AWS_SERVICES.md), KPI formulas (METRICS.md), DynamoDB vs. RDS (DYNAMODB_VS_RDS.md), screenshots
 ```
 
 Road geometry © OpenStreetMap contributors (ODbL) via OSRM; country boundaries © Natural Earth; map tiles © OpenFreeMap.

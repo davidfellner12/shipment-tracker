@@ -1,6 +1,7 @@
 // /app/analytics — KPIs from GET /metrics over 7/14/30 days: on-time rate, ETA accuracy,
 // CO2e, cost, and breakdowns by lane, customer and fuel type (CSV export).
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Download, CheckCircle2, Clock4, Leaf, Route, Euro, Thermometer } from 'lucide-react';
 import { api } from '../lib/api';
 import { usePoll, useSession } from '../lib/session';
@@ -29,7 +30,9 @@ function CsvButton({ name, rows, first, showCost }) {
   );
 }
 
-function BreakdownTable({ rows, first, showCost }) {
+// Rows open the delivered shipments behind the numbers; link(row) builds the Shipments URL.
+function BreakdownTable({ rows, first, showCost, link }) {
+  const navigate = useNavigate();
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[560px] text-sm">
@@ -45,7 +48,8 @@ function BreakdownTable({ rows, first, showCost }) {
         </thead>
         <tbody className="divide-y divide-line">
           {rows.map((r) => (
-            <tr key={r.key}>
+            <tr key={r.key} onClick={() => navigate(link(r))} title={`Show ${first.toLowerCase()} shipments`}
+              className="cursor-pointer transition-colors hover:bg-subtle/60">
               <td className="py-2.5 pr-4 text-ink">{r.label}</td>
               <td className="py-2.5 pr-4 text-right tabular-nums text-ink-2">{r.shipments}</td>
               <td className="py-2.5 pr-4"><RateBar value={r.onTimeRate} /></td>
@@ -65,6 +69,7 @@ export default function Analytics() {
   const [days, setDays] = useState(30);
   const { data: m } = usePoll(() => api.metrics({ customerId, days }), [customerId, days], 15000);
   const k = m?.kpis;
+  const history = (extra) => `/app/shipments?${new URLSearchParams({ scope: 'history', days, ...extra })}`;
 
   const exportReport = async () => {
     const res = await api.listShipments({ customerId, scope: 'history', days });
@@ -81,9 +86,13 @@ export default function Analytics() {
       </PageHeader>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi icon={CheckCircle2} label="On-time delivery" value={pct(k?.onTimeRate, 1)} loading={!m}
-          context={k ? `${num(k.delivered)} deliveries` : null} />
-        <Kpi icon={Clock4} label="Avg. lateness" value={k ? duration(k.avgLateMin) : '—'} loading={!m} context="when a delivery is late" />
+        <Link to={history({})} className="block rounded-xl transition-shadow hover:shadow-md" title="Show deliveries">
+          <Kpi icon={CheckCircle2} label="On-time delivery" value={pct(k?.onTimeRate, 1)} loading={!m}
+            context={k ? `${num(k.delivered)} deliveries` : null} />
+        </Link>
+        <Link to={history({ late: 1 })} className="block rounded-xl transition-shadow hover:shadow-md" title="Show late deliveries">
+          <Kpi icon={Clock4} label="Avg. lateness" value={k ? duration(k.avgLateMin) : '—'} loading={!m} context="when a delivery is late" />
+        </Link>
         <Kpi icon={Clock4} label="ETA accuracy" value={k?.etaMaeMin != null ? `±${k.etaMaeMin}` : '—'} unit="min" loading={!m}
           context={k ? `predicted at halfway` : null} />
         <Kpi icon={Route} label="Avg. transit" value={num(k?.avgTransitHours, 1)} unit="h" loading={!m}
@@ -118,7 +127,7 @@ export default function Analytics() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_380px]">
         <Card title="Lanes" subtitle="Top lanes by volume" action={<CsvButton name={`lanes-${days}d.csv`} rows={m?.lanes} first="Lane" showCost={isOperator} />}>
-          <BreakdownTable rows={m?.lanes || []} first="Lane" showCost={isOperator} />
+          <BreakdownTable rows={m?.lanes || []} first="Lane" showCost={isOperator} link={(r) => history({ q: r.label })} />
         </Card>
         <Card title="Emission intensity by powertrain" subtitle="g CO₂e per tonne-km">
           <RankBars data={(m?.fuelMix || []).map((r) => ({ ...r, label: FUEL[r.key] || r.key }))} valueKey="gCo2ePerTkm"
@@ -129,7 +138,7 @@ export default function Analytics() {
       {isOperator && (
         <Card title="Customers" subtitle="Service level per account" className="mt-4"
           action={<CsvButton name={`customers-${days}d.csv`} rows={m?.customers} first="Customer" showCost />}>
-          <BreakdownTable rows={m?.customers || []} first="Customer" showCost />
+          <BreakdownTable rows={m?.customers || []} first="Customer" showCost link={(r) => history({ customer: r.key })} />
         </Card>
       )}
     </>

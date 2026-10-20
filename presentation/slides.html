@@ -107,6 +107,17 @@
   .small { font-size: 0.6em; color: #a0aec0; }
   .note  { font-size: 0.5em; color: #718096; margin-top: 0.6em; }
   .tag-row { display: flex; flex-wrap: wrap; gap: 4px; margin: 0.4em 0; justify-content: center; }
+
+  /* ── Section label: where we are in the storyline ── */
+  .kicker { font-size: 0.42em; letter-spacing: 0.16em; text-transform: uppercase; color: #a0aec0; margin-bottom: 0.2em; }
+  .kicker b { color: var(--aws-orange); }
+
+  /* ── Agenda ── */
+  .agenda { list-style: none; margin: 0 auto; padding: 0; max-width: 860px; text-align: left; }
+  .agenda li { display: flex; gap: 0.8em; align-items: baseline; padding: 0.42em 0.8em; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 0.72em; }
+  .agenda .n { color: var(--aws-orange); font-weight: 800; min-width: 1.4em; }
+  .agenda .t { flex: 1; }
+  .agenda .t small { display: block; color: #a0aec0; font-size: 0.78em; }
 </style>
 </head>
 <body>
@@ -120,68 +131,59 @@
     <div class="badge">Project in Computer Science 2</div>
   </div>
   <h1>Tracelane — Real-Time Shipment Tracker</h1>
-  <div class="subtitle">Serverless freight visibility on AWS IoT, Kinesis &amp; Lambda</div>
+  <div class="subtitle">Serverless freight visibility on AWS IoT Core, SQS, Lambda &amp; DynamoDB</div>
   <div class="meta">
     David Fellner &nbsp;·&nbsp; Data &amp; Analytics &nbsp;·&nbsp; Solo project<br>
     <small style="color:#4a5568">github.com/davidfellner12/shipment-tracker</small>
   </div>
+<aside class="notes">
+<p>Hello, I'm David Fellner. My project is Tracelane, a fully serverless AWS pipeline that tracks a truck fleet in real time and predicts arrival times.</p>
+</aside>
 </section>
 
-<!-- ─── 2. BUSINESS PROBLEM ──────────────────────────────────────────────── -->
+<!-- ─── 2. AGENDA ────────────────────────────────────────────────────────── -->
 <section>
+  <h2>Agenda</h2>
+  <ul class="agenda">
+    <li><span class="n">1</span><span class="t">Use case</span></li>
+    <li><span class="n">2</span><span class="t">Architecture design</span></li>
+    <li><span class="n">3</span><span class="t">Well-Architected pillars</span></li>
+    <li><span class="n">4</span><span class="t">Live demo on AWS</span></li>
+    <li><span class="n">5</span><span class="t">What breaks first, trade-offs, Q&amp;A</span></li>
+  </ul>
+<aside class="notes">
+<p>The talk follows the evaluation criteria: first the use case, then the architecture with the reasons behind each service, then three Well-Architected pillars: Cost Optimization, and both Security and Reliability, because for this system both matter. Then the live demo on AWS, and at the end what I'd change at scale.</p>
+</aside>
+</section>
+
+<!-- ─── 3. USE CASE ──────────────────────────────────────────────────────── -->
+<section>
+  <div class="kicker"><b>1 · Use case</b></div>
   <h2>The Problem</h2>
-  <p style="font-size:0.72em;color:#a0aec0;margin-bottom:0.6em">
-    Carriers cannot tell their customers where a shipment is <em>right now</em> —
-    tracking runs on spreadsheets and phone calls.
-  </p>
+  <p style="font-size:0.85em;margin-bottom:0.8em">Carriers can't tell customers where a shipment is <em>right now</em>.</p>
   <div class="metrics">
-    <div class="metric">
-      <div class="num">34%</div>
-      <div class="label">avg. delay from tracking blind spots</div>
-      <div class="answer">→ live map + ETA that knows driving-time rules</div>
-    </div>
-    <div class="metric">
-      <div class="num">€18K</div>
-      <div class="label">avg. monthly cost of lost / misrouted parcels</div>
-      <div class="answer">→ every shipment has a position, timeline &amp; proof of delivery</div>
-    </div>
-    <div class="metric">
-      <div class="num">60%</div>
-      <div class="label">of customer calls are "where is my order?"</div>
-      <div class="answer">→ public tracking page &amp; customer portal</div>
-    </div>
+    <div class="metric"><div class="num" style="font-size:1.2em">Operator</div><div class="answer">live map + exceptions</div></div>
+    <div class="metric"><div class="num" style="font-size:1.2em">Customer</div><div class="answer">own shipments + reports</div></div>
+    <div class="metric"><div class="num" style="font-size:1.2em">Consignee</div><div class="answer">tracking link, no login</div></div>
   </div>
-  <p class="note">Illustrative industry estimates from the project 1-pager, not independently sourced.</p>
-</section>
-
-<!-- ─── 3. PROMISE vs DELIVERED ──────────────────────────────────────────── -->
-<section>
-  <h2>1-Pager Promise → Delivered</h2>
-  <table class="arch-table" style="font-size:0.62em">
-    <thead><tr><th>Promised in the 1-pager (April)</th><th>Delivered</th><th></th></tr></thead>
-    <tbody>
-      <tr><td>IoT Core → Kinesis → Lambda → DynamoDB → API → React</td><td>Built as specified, plus SQS DLQ, CloudWatch alarms, X-Ray, Budget — all in one CDK stack (measured run: SQS in place of Kinesis, Free plan)</td><td class="ok">✓</td></tr>
-      <tr><td><strong>&lt; 5 s</strong> latency</td><td>Measured on AWS (757 live messages): ingest p50 <strong>0.83 s</strong>, p95 <strong>3.26 s</strong>, max 4.77 s + ≤ 2 s dashboard poll</td><td class="ok">✓</td></tr>
-      <tr><td><strong>&lt; $5</strong> for the whole PoC</td><td>Measured usage of the AWS run (29,193 messages: 30-day backfill + 1.5 h live): <strong>≈ $0.25</strong> at list prices</td><td class="ok">✓</td></tr>
-      <tr><td>Status update: flag a shipment "delayed"</td><td>Operator flag, API-key protected; survives the next GPS ping</td><td class="ok">✓</td></tr>
-      <tr><td>Cost + Security pillars</td><td>Cost + Security <strong>+ Reliability</strong> (fault-injection test)</td><td class="ok">✓</td></tr>
-      <tr><td>ETA calculation</td><td>Driving-time-aware ETA — <strong>8× more accurate</strong> than distance ÷ speed</td><td class="ok">✓</td></tr>
-      <tr><td>Amplify hosting</td><td>Changed to S3 + CloudFront — same stack, no extra service (see trade-offs)</td><td class="warn">changed</td></tr>
-    </tbody>
-  </table>
+  <p class="small" style="margin-top:0.8em">PoC: 40 trucks · 156 real road lanes · position every 30 s</p>
+<aside class="notes">
+<p>The use case from my 1-pager: a road-freight carrier can't tell its customers where a shipment is right now. Tracking runs on spreadsheets and phone calls, and "where is my truck?" means calling the driver.</p><p>There are three users. The operator, the dispatcher, needs a live view of the fleet and the exceptions. The customer who booked the transport wants their own shipments and reports. And the consignee just wants a link that says when the truck arrives.</p><p>For the proof of concept I simulate a carrier with 40 trucks on 156 real road lanes; each truck reports every 30 seconds.</p>
+</aside>
 </section>
 
 <!-- ─── 4. ARCHITECTURE ──────────────────────────────────────────────────── -->
 <section>
+  <div class="kicker"><b>2 · Architecture design</b></div>
   <h2>Architecture</h2>
   <div class="flow">
     <div class="flow-box"><div class="svc-name">Fleet simulator</div><div class="svc-desc">40 trucks · MQTT/TLS</div></div>
     <div class="arrow">→</div>
     <div class="flow-box"><div class="svc-name">IoT Core</div><div class="svc-desc">X.509 auth · rule</div></div>
     <div class="arrow">→</div>
-    <div class="flow-box"><div class="svc-name">Kinesis</div><div class="svc-desc">1 shard · 24 h replay</div></div>
+    <div class="flow-box"><div class="svc-name">SQS</div><div class="svc-desc">ingest queue · buffer</div></div>
     <div class="arrow">→</div>
-    <div class="flow-box"><div class="svc-name">Lambda</div><div class="svc-desc">process_event</div></div>
+    <div class="flow-box"><div class="svc-name">Lambda</div><div class="svc-desc">process_event · batch 10</div></div>
     <div class="arrow">→</div>
     <div class="flow-box"><div class="svc-name">DynamoDB</div><div class="svc-desc">Shipments · Events</div></div>
   </div>
@@ -197,7 +199,7 @@
     <div class="flow-box"><div class="svc-name">DynamoDB</div><div class="svc-desc">read · flag</div></div>
   </div>
   <div class="flow" style="margin-top:0.2em">
-    <div class="flow-box side"><div class="svc-name">SQS DLQ</div><div class="svc-desc">bad / failed events</div></div>
+    <div class="flow-box side"><div class="svc-name">SQS DLQ</div><div class="svc-desc">bad / failed messages</div></div>
     <div class="arrow" style="opacity:.4">·</div>
     <div class="flow-box side"><div class="svc-name">CloudWatch + SNS</div><div class="svc-desc">4 alarms · dashboard</div></div>
     <div class="arrow" style="opacity:.4">·</div>
@@ -207,303 +209,274 @@
     <div class="arrow" style="opacity:.4">·</div>
     <div class="flow-box side"><div class="svc-name">AWS CDK</div><div class="svc-desc">1 stack · 1 command</div></div>
   </div>
-  <div class="tag-row" style="margin-top:0.6em">
-    <span class="badge">100 % serverless</span>
-    <span class="badge">Pay per use</span>
-    <span class="badge">Infrastructure as code</span>
-    <span class="badge">eu-central-1</span>
-  </div>
-  <p class="note">Live run measured on an AWS Free-plan account, which does not include Kinesis: deployed with <code>-c ingest=sqs</code> (IoT → SQS → same Lambda). Everything else is identical.</p>
+  
+<aside class="notes">
+<p>Top row is the write path. Each truck sends its position over MQTT to IoT Core; the connection is authenticated with an X.509 certificate. An IoT rule puts every message into an SQS queue. A Lambda reads the queue in batches of up to 10 and writes the current state and the milestone history into two DynamoDB tables.</p><p>Bottom row is the read path. The dashboard is a static React app on S3 behind CloudFront. It reads through API Gateway and a second Lambda, and a third Lambda handles the operator's status update.</p><p>Around it: a dead-letter queue for bad messages, CloudWatch alarms that email me, X-Ray tracing and a budget. All of it is one CDK stack.</p>
+</aside>
 </section>
 
 <!-- ─── 5. SERVICE CHOICES ───────────────────────────────────────────────── -->
 <section>
-  <h2>Why Each Service — and Not the Alternative</h2>
-  <table class="arch-table">
-    <thead><tr><th>Service</th><th>Job here</th><th>Rejected alternative &amp; why</th></tr></thead>
+  <div class="kicker"><b>2 · Architecture design</b> · why service A and not B</div>
+  <h2>Why These Services?</h2>
+  <table class="arch-table" style="font-size:0.74em">
+    <thead><tr><th>Chosen</th><th>Because</th><th>Instead of</th></tr></thead>
     <tbody>
-      <tr><td class="svc">IoT Core</td><td>MQTT ingest, certificate auth, rule → Kinesis</td><td class="alt"><strong>HTTP → API Gateway:</strong> one request per ping, no persistent session, shared secret instead of device certificate</td></tr>
-      <tr><td class="svc">Kinesis</td><td>Ordered per truck, 24 h replay, absorbs bursts</td><td class="alt"><strong>SQS:</strong> no ordering (FIFO caps throughput), message gone once consumed. <strong>IoT → Lambda direct:</strong> no replay, no buffer</td></tr>
-      <tr><td class="svc">Lambda</td><td>Validate, de-duplicate, write state + history</td><td class="alt"><strong>EC2 / Fargate:</strong> pays 24/7 for a workload that is idle most of the time</td></tr>
-      <tr><td class="svc">DynamoDB</td><td>Current state by ID; timeline by ID + time</td><td class="alt"><strong>RDS:</strong> hourly cost when idle, connection pooling from Lambda — access pattern is pure key-value</td></tr>
-      <tr><td class="svc">API Gateway</td><td>REST, throttling, usage plan + API key</td><td class="alt"><strong>Lambda function URL:</strong> no API keys, usage plans or per-client throttling</td></tr>
-      <tr><td class="svc">S3 + CloudFront</td><td>Static React app over HTTPS</td><td class="alt"><strong>Amplify</strong> (1-pager): works too, but a separate service; S3 + CloudFront lives in the same CDK stack</td></tr>
-      <tr><td class="svc">SQS</td><td>Dead-letter queue, 14 days</td><td class="alt"><strong>Just logging errors:</strong> events would be lost, no replay</td></tr>
+      <tr><td class="svc">IoT Core</td><td>MQTT, X.509 certificate auth</td><td class="alt">HTTP → API Gateway</td></tr>
+      <tr><td class="svc">SQS</td><td>buffer + retries, no idle cost</td><td class="alt">Kinesis · IoT → Lambda direct</td></tr>
+      <tr><td class="svc">Lambda</td><td>bursty work, pay per use</td><td class="alt">EC2 / Fargate</td></tr>
+      <tr><td class="svc">DynamoDB</td><td>key-value access, no idle cost</td><td class="alt">RDS</td></tr>
+      <tr><td class="svc">API Gateway</td><td>API keys, throttling</td><td class="alt">Lambda function URL</td></tr>
+      <tr><td class="svc">S3 + CloudFront</td><td>same CDK stack</td><td class="alt">Amplify</td></tr>
     </tbody>
   </table>
+<aside class="notes">
+<p>For each service I considered an alternative.</p><p>IoT Core instead of plain HTTPS to API Gateway: a device keeps one MQTT session open and authenticates with a certificate, instead of an API secret and one HTTP request per ping.</p><p>SQS as the buffer between IoT and Lambda; the next slide is about that decision.</p><p>Lambda instead of EC2 or Fargate: the work comes in short bursts, so I don't want to pay for a server that is idle most of the time.</p><p>DynamoDB instead of RDS: I only ever read by shipment ID, or by shipment ID plus time for the timeline. That's key-value access, with no idle cost and no connection pool to manage from Lambda.</p><p>API Gateway instead of a Lambda function URL, because I need API keys, usage plans and throttling for the write endpoint.</p><p>S3 and CloudFront instead of Amplify, which I had in the 1-pager: both work, but this way the website is in the same CDK stack and is deployed and destroyed with everything else.</p>
+</aside>
 </section>
 
-<!-- ─── 6. KEY DECISION: KINESIS ─────────────────────────────────────────── -->
+<!-- ─── 6. KEY DECISION: SQS ─────────────────────────────────────────────── -->
 <section>
-  <h2>Key Decision: Why Kinesis in the Middle?</h2>
-  <p class="small" style="margin-bottom:0.6em">IoT rules can invoke Lambda directly — Kinesis is the one service I could have left out.</p>
+  <div class="kicker"><b>2 · Architecture design</b> · key decision</div>
+  <h2>Why a Queue — and Why SQS?</h2>
   <div class="cols">
     <div class="col">
-      <h4>What it buys</h4>
-      <ul class="pill-list">
-        <li><span class="tag green">Ordering</span> partition key = shipment → one truck's pings stay in order</li>
-        <li><span class="tag green">Replay</span> 24 h retention — a fixed Lambda re-processes what a buggy one dropped</li>
-        <li><span class="tag green">Buffer</span> bursts (30-day backfill: ~23k messages) are smoothed, Lambda reads in batches of 100</li>
-        <li><span class="tag green">Fan-out</span> analytics / alerting consumers can read the same stream later</li>
-      </ul>
+      <h4>Measured on AWS</h4>
+      <div class="metrics" style="justify-content:flex-start;margin:0">
+        <div class="metric"><div class="num">4,660</div><div class="label">msgs / min peak</div></div>
+        <div class="metric"><div class="num">2,515</div><div class="label">Lambda throttles</div></div>
+        <div class="metric"><div class="num">0</div><div class="label">messages lost</div></div>
+      </div>
     </div>
     <div class="col">
-      <h4>What it costs</h4>
-      <div class="decision">
-        <div class="q">Money</div>
-        <div class="a">1 provisioned shard ≈ <span class="hi">$0.015 / h ≈ $0.36 / day</span>, even when idle — the largest line item of the PoC.</div>
-        <div class="tradeoff">Mitigation: <code>cdk destroy</code> after every session. On-Demand mode has a higher base price — wrong choice at 40 trucks.</div>
-      </div>
-      <div class="decision">
-        <div class="q">Capacity (measured)</div>
-        <div class="a">Avg. message <span class="hi">1.76 KB</span> → 1 MB/s per shard ≈ <span class="hi-green">17,000 trucks</span> at 30 s reporting.</div>
-        <div class="tradeoff">Scaling = add shards; Lambda gets one concurrent consumer per shard.</div>
-      </div>
-      <div class="decision">
-        <div class="q">Measured run: SQS instead</div>
-        <div class="a">The AWS Free plan has no Kinesis, so the stack is switchable: <code>-c ingest=sqs</code> puts a standard SQS queue in its place.</div>
-        <div class="tradeoff">Lost: ordering and replay. Ordering doesn't matter, because the <code>seq</code> check makes the result order-independent (tested). Replay is the real loss.</div>
-      </div>
+      <h4>SQS vs. Kinesis</h4>
+      <table class="arch-table" style="font-size:0.7em">
+        <thead><tr><th></th><th>SQS</th><th>Kinesis</th></tr></thead>
+        <tbody>
+          <tr><td>Idle cost</td><td class="ok">$0</td><td>$0.43 / day</td></tr>
+          <tr><td>Order</td><td>not needed (seq)</td><td>yes</td></tr>
+          <tr><td>Replay</td><td class="warn">no</td><td>24 h</td></tr>
+          <tr><td>Free plan</td><td class="ok">yes</td><td>no</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
+<aside class="notes">
+<p>Why a queue at all? IoT rules can invoke Lambda directly. But on AWS I saw why the buffer matters: the 30-day backfill pushed 4,660 messages a minute, and this new account allows only 10 concurrent Lambdas. 2,515 deliveries were throttled. Without a queue those messages would be gone; with SQS they just waited and were redelivered. Zero lost, zero errors.</p><p>Why SQS and not Kinesis, which I proposed in the 1-pager? The Free plan doesn't include Kinesis, so I made it a switch in the stack. Comparing them honestly: Kinesis costs 43 cents a day per shard even when idle; SQS costs nothing idle. Kinesis keeps order per truck, but I don't need order, because my sequence-number check makes the result order-independent, and I tested that. What I really lose is replay: with Kinesis I could re-process the last 24 hours after a bad deploy. So: SQS for this workload, Kinesis once I need replay or a second consumer. The Lambda is the same, it's one CDK flag.</p>
+</aside>
 </section>
 
 <!-- ─── 7. INGESTION LAMBDA ──────────────────────────────────────────────── -->
 <section>
-  <h2>process_event: Exactly-Once <em>Effect</em> on At-Least-Once Delivery</h2>
+  <div class="kicker"><b>2 · Architecture design</b> · ingestion</div>
+  <h2>Duplicates and Reordering Are Harmless</h2>
   <div class="cols">
     <div class="col">
-      <p class="small">MQTT QoS 1 and Kinesis retries both deliver duplicates; network jitter reorders. Every message carries a per-shipment <code>seq</code> — DynamoDB only accepts newer ones:</p>
       <pre><code class="language-python">table.update_item(
-  Key={"shipmentId": msg["shipmentId"]},
-  UpdateExpression="SET " + ", ".join(sets),
+  ...,
   ConditionExpression=
     "attribute_not_exists(seq) OR seq < :newseq",
-  ...
 )
-# ConditionalCheckFailed → duplicate / stale: skip</code></pre>
-      <p class="small">History rows use a sort key derived from the event itself → a replay overwrites instead of duplicating.</p>
+# duplicate / older message → skipped</code></pre>
     </div>
     <div class="col">
-      <h4>Per record, in order</h4>
       <ul class="pill-list">
-        <li><span class="tag red">Validate</span> ID format, seq, status, coordinates → invalid = <strong>DLQ, never retried</strong></li>
-        <li><span class="tag blue">History</span> milestones (departed, border, customs, POD…) → ShipmentEvents</li>
-        <li><span class="tag blue">KPI</span> keep the ETA predicted at half-way (lowest seq wins — order-independent)</li>
-        <li><span class="tag green">State</span> conditional upsert + <code>ingestLatencyMs</code> stamp</li>
-        <li><span class="tag">Errors</span> transient → partial batch failure, only that record onward is retried</li>
-      </ul>
-      <p class="small" style="margin-top:0.4em">Operator-owned fields (delay flag) are never overwritten by telemetry.</p>
-    </div>
-  </div>
-</section>
-
-<!-- ─── 8. ETA ───────────────────────────────────────────────────────────── -->
-<section>
-  <h2>ETA That Knows How Trucks Actually Drive</h2>
-  <p class="small" style="margin-bottom:0.6em">EU drivers must take a 45-min break after 4.5 h and an 11-h rest after 9 h; borders and customs add holds.
-  distance ÷ speed ignores all of it.</p>
-  <div class="cols">
-    <div class="col">
-      <h4>Mean ETA error at 10 % of the route</h4>
-      <div class="bar-row"><div class="lbl">distance ÷ 80 km/h</div><div class="bar" style="width:440px;background:var(--red);color:#fff">220 min</div></div>
-      <div class="bar-row"><div class="lbl">+ speed profile + customs</div><div class="bar" style="width:436px;background:var(--yellow)">218 min</div></div>
-      <div class="bar-row"><div class="lbl">+ driving-time rules</div><div class="bar" style="width:54px;background:var(--green)">27</div></div>
-      <p class="small" style="margin-top:0.6em">Within 30 min of actual arrival: <span class="hi-green">85 %</span> vs. 46 %.</p>
-    </div>
-    <div class="col">
-      <div class="decision">
-        <div class="q">Evaluation set-up</div>
-        <div class="a">5 seeds × 30 simulated days, 40 trucks, 37 hubs, 156 real road lanes (OSRM) → <strong>11,139 deliveries</strong>.</div>
-      </div>
-      <div class="decision">
-        <div class="q">Honest limitation</div>
-        <div class="a">Predictor and simulator share the same rules → this is an <strong>upper bound</strong>, not real-world accuracy.</div>
-        <div class="tradeoff">Where it runs: on the telematics unit (as real units do); the backend stores it. Production path: Amazon Location Service routes + learned dwell times.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ─── 9. LATENCY ───────────────────────────────────────────────────────── -->
-<section>
-  <h2>Meeting the &lt; 5 s Target</h2>
-  <div class="cols">
-    <div class="col">
-      <h4>Budget: message sent → visible in browser</h4>
-      <ul class="pill-list">
-        <li><span class="tag blue">IoT → queue → Lambda → DynamoDB</span> measured per message: <code>ingestLatencyMs</code></li>
-        <li><span class="tag red">First run: p50 9.3 s</span> messages waited ~10 s in SQS; removing the 1 s batching window → 0.3 s</li>
-        <li><span class="tag blue">Dashboard poll</span> every 2 s → ≤ 2 s</li>
-        <li><span class="tag green">Measured on AWS</span> p50 <strong>0.83 s</strong> · p95 <strong>3.26 s</strong> · p99 4.18 s (n = 757)</li>
-      </ul>
-      <p class="small" style="margin-top:0.5em">Typical end-to-end ≈ 1.8 s (p50 + avg. 1 s poll). Worst case at p95 ≈ 5.3 s, right at the limit. Watched by an alarm: consumer lag &gt; 30 s for 3 min → email.</p>
-    </div>
-    <div class="col">
-      <div class="decision">
-        <div class="q">Why REST polling and not WebSockets?</div>
-        <div class="a">Polling already fits the target. WebSockets would need a connection table, connect/disconnect Lambdas and a fan-out path.</div>
-        <div class="tradeoff"><strong>Upgrade path:</strong> DynamoDB Streams → Lambda → API Gateway WebSocket, once there are many concurrent viewers.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ─── 10. RELIABILITY ──────────────────────────────────────────────────── -->
-<section>
-  <h2>Reliability: Tested by Injecting Faults</h2>
-  <div class="cols">
-    <div class="col">
-      <h4>Mechanisms</h4>
-      <ul class="pill-list">
-        <li><span class="tag green">Idempotency</span> seq-conditional writes — duplicates and reordering are harmless</li>
-        <li><span class="tag green">DLQ</span> IoT rule errors, invalid payloads and exhausted retries → SQS, 14 days</li>
-        <li><span class="tag green">Bisect</span> failing batch is split until the bad record is isolated</li>
-        <li><span class="tag green">Max age 1 h</span> stale GPS is not retried forever</li>
-        <li><span class="tag green">Alarms</span> DLQ not empty · Lambda errors · stream lag · API 5xx → SNS email</li>
+        <li><span class="tag red">Invalid</span> → DLQ, never retried</li>
+        <li><span class="tag green">Duplicate / old</span> → skipped</li>
+        <li><span class="tag blue">Transient error</span> → only that message retried</li>
       </ul>
     </div>
-    <div class="col">
-      <h4>Experiment (chaos-style)</h4>
-      <div class="decision">
-        <div class="q">Hypothesis: perturbed input → identical final state</div>
-        <div class="a">Same 2,925 messages replayed with <strong>20 % duplicates</strong>, <strong>2 % malformed</strong> and <strong>reordering</strong>.</div>
-      </div>
-      <div class="metrics" style="margin:0.3em 0">
-        <div class="metric"><div class="num">302/302</div><div class="label">shipments in identical final state</div></div>
-        <div class="metric"><div class="num">58/58</div><div class="label">malformed messages in the DLQ</div></div>
-      </div>
-      <p class="small">The evaluation also found 2 real bugs (driving-hours inconsistency, order-dependent ETA KPI) — both fixed.</p>
-      <p class="small"><strong>Real fault on the AWS run:</strong> a transient KMS 500 failed one DynamoDB write → partial-batch retry, lag alarm emailed, DLQ stayed at 0, no data lost.</p>
-    </div>
   </div>
+<aside class="notes">
+<p>MQTT and SQS both deliver at least once, so duplicates happen, and a standard queue doesn't keep order. So every message carries a per-shipment sequence number and DynamoDB only accepts a newer one: a conditional write. The effect is exactly-once, even though delivery isn't. Invalid messages go straight to the dead-letter queue and are never retried; a transient error returns only that one message to the queue.</p>
+</aside>
 </section>
 
-<!-- ─── 11. SECURITY ─────────────────────────────────────────────────────── -->
+<!-- ─── 8. COST ─────────────────────────────────────────────────────────── -->
 <section>
+  <div class="kicker"><b>3 · Well-Architected</b> · pillar 1</div>
+  <h2>Cost Optimization</h2>
+  <table class="arch-table" style="font-size:0.8em;max-width:880px;margin:0 auto">
+    <thead><tr><th>Course rule</th><th>What I did</th></tr></thead>
+    <tbody>
+      <tr><td class="svc">Turn off when unused</td><td>nothing billed per hour · <code>cdk destroy</code></td></tr>
+      <tr><td class="svc">Size &amp; type wisely</td><td>ARM Lambdas · on-demand DynamoDB · SQS, not Kinesis</td></tr>
+      <tr><td class="svc">Keep an eye on it</td><td>CloudWatch usage × list price</td></tr>
+      <tr><td class="svc">Budgets &amp; alerts</td><td>2 budgets · email at 50 / 80 / 100 %</td></tr>
+    </tbody>
+  </table>
+  <ul class="pill-list" style="max-width:640px;margin:0.8em auto 0">
+    <li><span class="tag red">Lesson</span> dashboard reads cost more than the pipeline</li>
+  </ul>
+<aside class="notes">
+<p>First pillar, Cost Optimization. I went through the cost rules from the first lab one by one.</p><p>Turn off services when not in use: nothing in my stack is billed per hour. No server, no database instance, no Kinesis shard. When no truck sends anything, it costs practically nothing, and after the course one command, cdk destroy, removes everything.</p><p>Choose size and type wisely: the Lambdas run on ARM, which is cheaper per second, DynamoDB is on-demand so I pay per write instead of reserving capacity, and I chose SQS over Kinesis, because a Kinesis shard is billed every hour, even when idle.</p><p>Keep an eye on it: Cost Explorer has no data yet on a new account, so I take the usage from CloudWatch, messages and read and write units, and multiply by the Frankfurt list prices.</p><p>Budgets and alerts: two budgets, one for the stack and one for the whole account, which email me at 50 and 80 percent and when the forecast passes 100.</p><p>And one lesson: the dashboard reads cost more than the whole pipeline, because every poll scans the table. That's also my answer to what breaks first at scale.</p>
+</aside>
+</section>
+
+<!-- ─── 9. SECURITY ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="kicker"><b>3 · Well-Architected</b> · pillar 2</div>
   <h2>Security</h2>
   <div class="cols">
     <div class="col">
       <ul class="pill-list">
-        <li><span class="tag blue">Device identity</span> X.509 certificate; IoT policy allows only client IDs <code>shipment-simulator-*</code> and only publish to <code>shipments/*/location</code></li>
-        <li><span class="tag blue">Least privilege</span> one role per function with exactly the actions it needs — e.g. ingest gets <code>UpdateItem</code>, the API gets <code>GetItem/Scan/Query</code>, nothing else</li>
-        <li><span class="tag blue">Writes</span> PUT needs an API key tied to a usage plan (5 req/s); key is never bundled in the site</li>
-        <li><span class="tag blue">Abuse</span> stage throttling 50 req/s, burst 100; CORS allow-list</li>
-        <li><span class="tag blue">Encryption</span> at rest: DynamoDB, Kinesis, SQS, S3. In transit: TLS everywhere (MQTT 8883, HTTPS)</li>
+        <li><span class="tag blue">Devices</span> X.509 certificate, publish to location topics only</li>
+        <li><span class="tag blue">IAM</span> one role per Lambda, only the actions it needs</li>
+        <li><span class="tag blue">Writes</span> API key + usage plan</li>
+        <li><span class="tag blue">Abuse</span> throttling · CORS · schema validation</li>
+        <li><span class="tag blue">Encryption</span> at rest + TLS in transit</li>
       </ul>
     </div>
     <div class="col">
       <div class="decision">
-        <div class="q">Shared responsibility</div>
-        <div class="a">All managed services → AWS patches the hosts; my part is identities, policies and data.</div>
+        <div class="q">Known gap</div>
+        <div class="a">1 certificate for the whole fleet → 1 per truck in production</div>
       </div>
-      <div class="decision">
-        <div class="q">Known gap → production</div>
-        <div class="a">An API key identifies a client, not a user.</div>
-        <div class="tradeoff">Next step: Cognito user pool + authorizer, and tenant isolation (customer ID from the token, not the query string).</div>
+      <div class="decision" style="margin-top:0.6em">
+        <div class="q">Known gap</div>
+        <div class="a">API key ≠ user identity → Cognito in production</div>
       </div>
     </div>
   </div>
+<aside class="notes">
+<p>Second pillar, Security. Devices authenticate with an X.509 certificate, and the IoT policy only allows our client IDs and only publishing to the location topics. Every Lambda has its own role with exactly the actions it needs. Writes need an API key with a usage plan, and everything is encrypted at rest and in transit. Two known gaps. First, in the proof of concept the simulator is one device with one certificate for all 40 trucks. In production every truck would be an IoT Thing with its own certificate, registered through fleet provisioning, so a single stolen truck can be blocked on its own. Second, an API key is not a user identity; in production I'd add Cognito.</p>
+</aside>
 </section>
 
-<!-- ─── 12. COST ─────────────────────────────────────────────────────────── -->
+<!-- ─── 10. RELIABILITY ──────────────────────────────────────────────────── -->
 <section>
-  <h2>Cost Optimization</h2>
+  <div class="kicker"><b>3 · Well-Architected</b> · pillar 3</div>
+  <h2>Reliability</h2>
   <div class="cols">
-    <div class="col" style="flex:1.3">
-      <h4>Estimate per day live (40 trucks, 30 s reporting, ≤ 115k msgs)</h4>
-      <table class="cost-table">
-        <thead><tr><th>Service</th><th>Driver</th><th>≈ / day</th></tr></thead>
-        <tbody>
-          <tr><td>Kinesis</td><td>1 shard-hour × 24, idle or not</td><td>$0.36</td></tr>
-          <tr><td>DynamoDB</td><td>on-demand writes, ~3 WRU per message</td><td>~$0.25</td></tr>
-          <tr><td>IoT Core</td><td>messages + rule actions</td><td>~$0.15</td></tr>
-          <tr><td>Lambda, API GW, SQS, CloudWatch</td><td>within free tier at this volume</td><td>~$0</td></tr>
-          <tr class="total"><td colspan="2">Estimate, pipeline only</td><td>&lt; $1 / day</td></tr>
-          <tr><td>DynamoDB reads</td><td>each open dashboard tab: table scan every 2 s</td><td>~$0.15 / hour</td></tr>
-          <tr><td colspan="2"><strong>Measured AWS run</strong>: 29k msgs, 2.9 WRU/msg (estimate: 3) · Cost Explorer <span class="todo">confirm</span></td><td>≈ $0.25</td></tr>
-        </tbody>
-      </table>
-    </div>
     <div class="col">
       <ul class="pill-list">
-        <li><span class="tag green">Pay per use</span> on-demand DynamoDB, Lambda, API GW — nothing billed per hour except the shard</li>
-        <li><span class="tag green">Graviton</span> all Lambdas on ARM64 (~20 % cheaper)</li>
-        <li><span class="tag green">TTL</span> in-transit 7 d, delivered 90 d — no storage growth</li>
-        <li><span class="tag green">Log retention</span> 2 weeks</li>
-        <li><span class="tag green">Guardrail</span> AWS Budget, email at 50 / 80 / 100 %</li>
-        <li><span class="tag green">Lifecycle</span> <code>cdk destroy</code> when done; without Kinesis the idle stack costs cents</li>
+        <li><span class="tag green">Idempotent</span> duplicates + reordering harmless</li>
+        <li><span class="tag green">Retries</span> 4 attempts → DLQ</li>
+        <li><span class="tag green">Alarms</span> DLQ · errors · lag · 5xx → email</li>
+        <li><span class="tag red">Real faults</span> KMS 500 · 2,515 throttles → 0 lost</li>
       </ul>
     </div>
+    <div class="col">
+      <p class="small">20 % duplicates · 2 % malformed · reordered</p>
+      <div class="metrics" style="margin:0.3em 0">
+        <div class="metric"><div class="num">302/302</div><div class="label">identical final state</div></div>
+        <div class="metric"><div class="num">58/58</div><div class="label">bad messages in DLQ</div></div>
+      </div>
+    </div>
   </div>
+<aside class="notes">
+<p>Third pillar, Reliability. For a tracking system it matters as much as security: a lost position is a wrong ETA. I tested it like a chaos experiment: replay the same messages with 20 % duplicates, 2 % malformed and reordered. Hypothesis: same final state. Result: 302 of 302 shipments identical, all 58 bad messages in the DLQ. The experiment also found two real bugs, which I fixed.</p><p>And AWS gave me two real faults for free. KMS returned a 500 on one DynamoDB write: the Lambda reported that one message as failed, SQS redelivered it, the alarm emailed me. And the 10-Lambda limit throttled 2,515 deliveries; the queue held them all. The dead-letter queue stayed empty both times.</p>
+</aside>
 </section>
 
-<!-- ─── 13. SCALING ──────────────────────────────────────────────────────── -->
+<!-- ─── 11. DEMO ─────────────────────────────────────────────────────────── -->
 <section>
-  <h2>What Breaks First at 100× ?</h2>
-  <ul class="pill-list">
-    <li><span class="tag green">Ingest</span> fine — 1 shard ≈ 17,000 trucks at 30 s; add shards linearly, Lambda follows</li>
-    <li><span class="tag green">Writes</span> fine — every shipment is its own partition key, no hot partition</li>
-    <li><span class="tag red">Reads</span> <strong>first bottleneck:</strong> the list API scans the table on every 2 s poll — cost grows with table size × open browser tabs</li>
-    <li><span class="tag blue">Fix</span> sparse GSI on active shipments (only in-transit items are indexed) + a few seconds of response caching; metrics pre-aggregated by a stream consumer</li>
-    <li><span class="tag blue">Push</span> DynamoDB Streams → WebSocket API once polling viewers dominate</li>
-  </ul>
-  <p class="small" style="margin-top:0.6em">Deliberate PoC choice: a scan is correct and cheap for ~2,000 items; the fix is known and isolated to the API Lambda.</p>
-</section>
-
-<!-- ─── 14. DEMO ─────────────────────────────────────────────────────────── -->
-<section>
+  <div class="kicker"><b>4 · Live demo</b> · on AWS, eu-central-1</div>
   <h2>Live Demo</h2>
-  <div class="demo-step"><div class="step-num">1</div><div class="step-body">
-    <strong>Pipeline live</strong> — terminal: <code>python simulator/simulator.py</code>; 40 trucks publish over MQTT. AWS console: CloudWatch ops dashboard (records in, ingest lag, DLQ).
-  </div></div>
-  <div class="demo-step"><div class="step-num">2</div><div class="step-body">
-    <strong>Operator control tower</strong> (CloudFront URL → <code>/app</code>) — live map, exceptions, on-time KPIs; trucks move within seconds.
-  </div></div>
-  <div class="demo-step"><div class="step-num">3</div><div class="step-body">
-    <strong>Latency proof</strong> — <code>/app/system</code>: ingest latency p50 / p95 measured on every message.
-  </div></div>
-  <div class="demo-step"><div class="step-num">4</div><div class="step-body">
-    <strong>Status update</strong> — open a shipment → <em>Flag shipment</em> (API key) → status turns DELAYED; keeps it after the next GPS ping. Then the customer's public <code>/track/…</code> page.
-  </div></div>
-  <div class="demo-step"><div class="step-num">5</div><div class="step-body">
-    <strong>Resilience</strong> — publish a malformed message → it appears in the SQS DLQ, the alarm fires, the pipeline keeps running.
-  </div></div>
-  <div class="demo-step"><div class="step-num">6</div><div class="step-body">
-    <strong>Cost</strong> — Cost Explorer for the whole PoC, and the Budget with its alert thresholds.
-  </div></div>
-  <p class="note">Fallback if the network fails: the same dashboard runs fully in the browser (<code>npm run dev</code>, mock mode).</p>
+  <div style="max-width:720px;margin:0 auto">
+  <div class="demo-step"><div class="step-num">1</div><div class="step-body" style="font-size:0.8em"><strong>Pipeline live</strong> — simulator + CloudWatch</div></div>
+  <div class="demo-step"><div class="step-num">2</div><div class="step-body" style="font-size:0.8em"><strong>Control tower</strong> — live map, exceptions</div></div>
+  <div class="demo-step"><div class="step-num">3</div><div class="step-body" style="font-size:0.8em"><strong>Status update</strong> — flag + tracking link</div></div>
+  <div class="demo-step"><div class="step-num">4</div><div class="step-body" style="font-size:0.8em"><strong>Resilience</strong> — bad message → DLQ</div></div>
+  <div class="demo-step"><div class="step-num">5</div><div class="step-body" style="font-size:0.8em"><strong>Cost + IaC</strong> — Budgets, CDK stack</div></div>
+  </div>
+<aside class="notes">
+<p><strong>Step 1 — Pipeline live (1 min)</strong></p>
+<p><em>[Show the simulator window that is already running (real time, one ping per truck every 30 s)]</em></p>
+<p>Each line is one truck: status, progress, speed, country, and whether it's on time. These go over MQTT to IoT Core.</p>
+<p><em>[AWS console → CloudWatch dashboard <code>ShipmentTracker-dev</code>: messages into SQS, queue age, DLQ depth = 0]</em></p>
+<p><strong>Step 2 — Operator view (1.5 min)</strong></p>
+<p><em>[Browser: CloudFront URL → <code>/app</code>]</em></p>
+<p>This is the operator's control tower: live map, exceptions, on-time rate. The trucks move as their positions arrive; that's the full AWS pipeline, not a mock. Everything on this page is read through API Gateway and Lambda from what the pipeline stored in DynamoDB.</p>
+<p><strong>Step 3 — Status update (2 min)</strong></p>
+<p><em>[Open any in-transit shipment → <strong>Flag shipment</strong> → paste operator API key → status DELAYED]</em></p>
+<p>Writes need the API key; it's never bundled in the website. The next GPS ping doesn't reset the flag: telemetry never overwrites operator fields.</p>
+<p><em>[Click <strong>Share tracking link</strong> → open <code>/track/&lt;id&gt;</code> in a private window]</em></p>
+<p>And this is what the consignee sees, instead of calling.</p>
+<p><strong>Step 4 — Resilience (1.5 min)</strong></p>
+<p><em>[Second PowerShell (paste beforehand, press Enter now; tested):<br>
+<code>$ep = aws iot describe-endpoint --endpoint-type iot:Data-ATS --query endpointAddress --output text; '{"shipmentId":"DEMO-BAD","seq":0}' | Out-File -Encoding ascii -NoNewline "$env:TEMP/bad.json"; aws iot-data publish --endpoint-url "https://$ep" --topic shipments/DEMO-BAD/location --cli-binary-format raw-in-base64-out --payload "fileb://$env:TEMP/bad.json"</code>]</em></p>
+<p>A broken message: invalid sequence number. It goes through IoT and the ingest queue, the Lambda rejects it, and it lands in the dead-letter queue. The alarm emails me, and the trucks on the map keep moving.</p>
+<p><em>[SQS console → <code>shipment-process-event-dlq-dev</code> → Send and receive messages → Poll for messages → open it: <code>"reason": "missing/invalid seq"</code>. Afterwards: Purge the queue.]</em></p>
+<p><strong>Step 5 — Cost + infrastructure as code (1.5 min)</strong></p>
+<p><em>[Billing → Budgets → <code>shipment-tracker-dev</code>]</em></p>
+<p>Here are the two budgets with their alert thresholds. Billed so far: zero dollars, it's all within the Free plan credits.</p>
+<p><em>[Editor: <code>infrastructure/stack.py</code>]</em></p>
+<p>Everything you've seen is one CDK stack: one command to deploy, one to destroy.</p>
+</aside>
 </section>
 
-<!-- ─── 15. TRADE-OFFS ───────────────────────────────────────────────────── -->
+<!-- ─── 12. SCALING ──────────────────────────────────────────────────────── -->
 <section>
-  <h2>Trade-offs I Would Defend</h2>
-  <ul class="pill-list">
-    <li><span class="tag blue">Streaming</span> <strong>Kinesis vs. IoT → Lambda direct.</strong> Ordering + replay for $0.36/day. At 40 trucks the shard is the biggest cost — accepted, and destroyed between sessions.</li>
-    <li><span class="tag blue">Push</span> <strong>REST polling vs. WebSocket.</strong> Meets &lt; 5 s with 3 fewer moving parts. Push is the upgrade, not the PoC.</li>
-    <li><span class="tag blue">Data</span> <strong>DynamoDB vs. RDS.</strong> Key-value access, no idle cost, no connection pool from Lambda.</li>
-    <li><span class="tag blue">Reads</span> <strong>Scan vs. GSI.</strong> Simple and correct at PoC size; first thing to change at scale.</li>
-    <li><span class="tag blue">Auth</span> <strong>API key vs. Cognito.</strong> Enough to protect writes in a PoC; Cognito for real users and tenants.</li>
-    <li><span class="tag blue">Hosting</span> <strong>S3 + CloudFront vs. Amplify.</strong> One stack, one deploy, one teardown.</li>
+  <div class="kicker"><b>5 · Reflection</b></div>
+  <h2>What Breaks First at Scale?</h2>
+  <ul class="pill-list" style="max-width:760px;margin:0 auto">
+    <li><span class="tag green">Ingest</span> fine — SQS scales, Lambda follows</li>
+    <li><span class="tag green">Writes</span> fine — one partition key per shipment</li>
+    <li><span class="tag" style="background:var(--yellow)">Concurrency</span> account limit: 10 here, 1,000 default</li>
+    <li><span class="tag red">Reads</span> table scan on every poll — first bottleneck</li>
+    <li><span class="tag blue">Fix</span> index + cache + push</li>
   </ul>
+<aside class="notes">
+<p>If the fleet grew a hundred times: ingest is fine, SQS has no practical throughput limit and Lambda adds queue readers on its own. The real ceiling there is the account's concurrency limit; mine is 10, and I've seen it throttle, without losing anything. Writes are fine, because every shipment is its own partition key.</p><p>The first thing to break is reads: the list API scans the whole table on every dashboard poll, and the reads already outweigh the writes today. The fix is known and isolated: a sparse index on active shipments, a few seconds of caching, metrics computed in the write path, and later push over WebSockets. For 2,200 items a scan is correct and cheap, so I kept it simple.</p>
+</aside>
 </section>
 
-<!-- ─── 16. CLOSING ──────────────────────────────────────────────────────── -->
+<!-- ─── 13. TRADE-OFFS ───────────────────────────────────────────────────── -->
+<section>
+  <div class="kicker"><b>5 · Reflection</b></div>
+  <h2>Trade-offs</h2>
+  <table class="arch-table" style="font-size:0.78em;max-width:820px;margin:0 auto">
+    <thead><tr><th>Chosen</th><th>Over</th><th>Gave up</th></tr></thead>
+    <tbody>
+      <tr><td class="svc">SQS</td><td>Kinesis</td><td class="alt">replay</td></tr>
+      <tr><td class="svc">Polling</td><td>WebSocket</td><td class="alt">instant push</td></tr>
+      <tr><td class="svc">DynamoDB</td><td>RDS</td><td class="alt">joins, SQL</td></tr>
+      <tr><td class="svc">Scan</td><td>Index</td><td class="alt">scale</td></tr>
+      <tr><td class="svc">API key</td><td>Cognito</td><td class="alt">user identity</td></tr>
+      <tr><td class="svc">S3 + CloudFront</td><td>Amplify</td><td class="alt">Git-based deploys</td></tr>
+    </tbody>
+  </table>
+<aside class="notes">
+<p>Every choice on this slide has a simpler option and a production option. I took the simple one where it's enough for this use case, and I know what I'd change first: SQS instead of Kinesis until I need replay, polling instead of WebSockets, DynamoDB instead of RDS, a scan instead of an index, an API key instead of Cognito, and S3 with CloudFront instead of Amplify.</p>
+</aside>
+</section>
+
+<!-- ─── 14. EVALUATION CRITERIA ──────────────────────────────────────────── -->
+<section>
+  <div class="kicker"><b>5 · Reflection</b> · the course questions, answered</div>
+  <h2>Evaluation Criteria</h2>
+  <table class="arch-table" style="font-size:0.8em;max-width:700px;margin:0 auto">
+    <thead><tr><th>Criterion</th><th>Slide</th></tr></thead>
+    <tbody>
+      <tr><td>Architecture</td><td>4 · 7 · 12</td></tr>
+      <tr><td>Why service A?</td><td>5</td></tr>
+      <tr><td>Alternatives?</td><td>5 · 6 · 13</td></tr>
+      <tr><td>Cost Optimization + cost management</td><td>8</td></tr>
+      <tr><td>Security <em>and</em> Reliability</td><td>9 · 10</td></tr>
+      <tr><td>Demo</td><td>11</td></tr>
+    </tbody>
+  </table>
+<aside class="notes">
+<p>To close the loop with how the project is evaluated, here's where each question was answered. Architecture: the data flow, how each message is processed, and what breaks first at scale. Why each service and what the alternative was: slide 5, SQS versus Kinesis in detail on slide 6, and the trade-offs. Cost Optimization together with the cost-management rules from the first lab. Instead of choosing one, both Security and Reliability. And the demo.</p>
+</aside>
+</section>
+
+<!-- ─── 15. CLOSING ──────────────────────────────────────────────────────── -->
 <section data-background-gradient="linear-gradient(135deg,#0a0e1a,#1a2332,#0d1b2a)">
   <h2>Summary</h2>
-  <div class="metrics" style="margin-bottom:0.8em">
-    <div class="metric"><div class="num">3.3 s</div><div class="label">ingest latency p95, measured on AWS (target &lt; 5 s)</div></div>
-    <div class="metric"><div class="num">≈ $0.25</div><div class="label">AWS run, measured usage × list prices (target &lt; $5)</div></div>
-    <div class="metric"><div class="num">8×</div><div class="label">more accurate ETA than distance ÷ speed</div></div>
-    <div class="metric"><div class="num">302/302</div><div class="label">correct final states under injected faults</div></div>
+  <div class="metrics" style="margin-bottom:0.8em;flex-wrap:nowrap">
+    <div class="metric"><div class="num">Serverless</div><div class="label">pay per use</div></div>
+    <div class="metric"><div class="num">3</div><div class="label">pillars covered</div></div>
+    <div class="metric"><div class="num">0</div><div class="label">messages lost</div></div>
+    <div class="metric"><div class="num">1</div><div class="label">CDK stack</div></div>
   </div>
-  <ul class="pill-list" style="max-width:700px;margin:0 auto">
-    <li><span class="tag green">Delivered</span> every 1-pager promise, on AWS, in one CDK stack</li>
-    <li><span class="tag green">Pillars</span> Cost · Security · Reliability — each with evidence, not just a list</li>
-    <li><span class="tag blue">Next</span> Cognito + tenants, sparse GSI, WebSocket push, Location Service routes</li>
-  </ul>
+  <p style="font-size:0.7em;color:#cbd5e0">IoT Core → SQS → Lambda → DynamoDB · API Gateway · CloudFront</p>
   <div style="margin-top:1.1em;font-size:0.7em;color:#a0aec0">David Fellner · TU Wien × AWS 2026</div>
   <div style="margin-top:0.5em;font-size:1.5em">Questions?</div>
+<aside class="notes">
+<p>To sum up: Tracelane is a fully serverless pipeline, IoT Core, SQS, Lambda and DynamoDB, served through API Gateway and CloudFront, all in one CDK stack. For every service I've shown why I chose it and what the alternative was. All three pillars are covered: Cost Optimization with pay-per-use and budgets, Security with certificate auth and least privilege, and Reliability, where no message was lost, neither under injected faults nor under real throttling. Next steps would be Cognito with tenants, an index instead of the scan, WebSocket push, and Kinesis once replay matters. Thank you, I'm happy to take questions.</p>
+</aside>
 </section>
 
 </div><!-- /.slides -->
@@ -511,6 +484,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/plugin/highlight/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/plugin/notes/notes.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/plugin/highlight/monokai.min.css">
 <script>
 Reveal.initialize({
@@ -524,7 +498,7 @@ Reveal.initialize({
   width: 1100,
   height: 700,
   margin: 0.04,
-  plugins: [ RevealHighlight ]
+  plugins: [ RevealHighlight, RevealNotes ]
 });
 </script>
 </body>

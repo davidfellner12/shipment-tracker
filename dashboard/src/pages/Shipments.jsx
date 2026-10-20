@@ -12,17 +12,20 @@ import { Empty, ExceptionPill, PageHeader, Progress, Segmented, SeverityDot, Sta
 export default function Shipments() {
   const { isOperator, customerId } = useSession();
   const navigate = useNavigate();
-  const [scope, setScope] = useState('active');
-  const [query, setQuery] = useState('');
+  // Initial filters can come from the URL, e.g. links from Analytics:
+  // ?scope=history&days=14&q=Munich → Frankfurt&customer=<id>&late=1
   const [searchParams] = useSearchParams();
+  const [scope, setScope] = useState(searchParams.get('scope') === 'history' ? 'history' : 'active');
+  const [query, setQuery] = useState(searchParams.get('q') || '');
   const [status, setStatus] = useState(() => (STATUS[searchParams.get('status')] ? searchParams.get('status') : ''));
-  const [customer, setCustomer] = useState('');
-  const [onlyExceptions, setOnlyExceptions] = useState(false);
+  const [customer, setCustomer] = useState(() => (CUSTOMERS[searchParams.get('customer')] ? searchParams.get('customer') : ''));
+  const [onlyExceptions, setOnlyExceptions] = useState(searchParams.get('late') === '1');
+  const days = [7, 14, 30].includes(Number(searchParams.get('days'))) ? Number(searchParams.get('days')) : 30;
 
   const effectiveCustomer = customerId || customer || undefined;
   const { data } = usePoll(
-    () => api.listShipments({ customerId: effectiveCustomer, scope: scope === 'history' ? 'history' : undefined, days: 30 }),
-    [effectiveCustomer, scope], scope === 'history' ? 15000 : 2000);
+    () => api.listShipments({ customerId: effectiveCustomer, scope: scope === 'history' ? 'history' : undefined, days }),
+    [effectiveCustomer, scope, days], scope === 'history' ? 15000 : 2000);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -35,7 +38,7 @@ export default function Shipments() {
 
   return (
     <>
-      <PageHeader title="Shipments" subtitle={scope === 'history' ? 'Delivered in the last 30 days' : 'On the road and delivered in the last 24 h'}>
+      <PageHeader title="Shipments" subtitle={scope === 'history' ? `Delivered in the last ${days} days` : 'On the road and delivered in the last 24 h'}>
         <button className="btn-outline" onClick={() => downloadCsv(`shipments-${scope}.csv`, rows, SHIPMENT_COLUMNS)}>
           <Download size={15} /> Export CSV
         </button>
